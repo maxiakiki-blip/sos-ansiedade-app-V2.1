@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Lock, ShieldAlert, CheckCircle2, ArrowRight, Eye, EyeOff, Key, HelpCircle } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import { Buyer } from '../types';
 
 interface LoginProps {
@@ -79,19 +80,20 @@ export default function Login({ onLogin, registeredBuyers, superadminPassword }:
       <div className="w-full max-w-sm relative z-10">
 
         {/* Illustration */}
-        <div className="flex justify-center mb-8">
+        <motion.div
+          className="flex justify-center mb-8"
+          initial={{ opacity: 0, y: -20, scale: 0.85 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ type: 'spring', stiffness: 260, damping: 22 }}
+        >
           <div className="relative w-28 h-28">
             <div className="absolute inset-0 rounded-full pulse-ring"
               style={{ background: 'linear-gradient(135deg, #b388c4, #a78bfa)', opacity: 0.25 }} />
             <div className="w-28 h-28 rounded-full flex items-center justify-center shadow-2xl float"
               style={{ background: 'linear-gradient(135deg, #b388c4 0%, #9d6eb5 50%, #7c3aed 100%)' }}>
-              {/* SVG Illustration - brain with heart */}
               <svg viewBox="0 0 80 80" className="w-16 h-16" fill="none">
-                {/* Brain shape */}
                 <path d="M40 20 C30 20 22 26 22 34 C22 38 24 41 27 43 C25 44 23 47 23 50 C23 56 28 60 34 60 L46 60 C52 60 57 56 57 50 C57 47 55 44 53 43 C56 41 58 38 58 34 C58 26 50 20 40 20Z" fill="white" opacity="0.9"/>
-                {/* Heart inside */}
                 <path d="M40 52 C40 52 33 47 33 43 C33 40.5 35 39 37 39 C38.5 39 39.5 39.8 40 41 C40.5 39.8 41.5 39 43 39 C45 39 47 40.5 47 43 C47 47 40 52 40 52Z" fill="#f87171" opacity="0.9"/>
-                {/* Brain lines/folds */}
                 <path d="M32 32 Q35 29 38 32" stroke="#b388c4" strokeWidth="1.5" strokeLinecap="round" fill="none" opacity="0.7"/>
                 <path d="M42 30 Q46 27 49 31" stroke="#b388c4" strokeWidth="1.5" strokeLinecap="round" fill="none" opacity="0.7"/>
                 <path d="M28 42 Q31 40 34 42" stroke="#b388c4" strokeWidth="1.2" strokeLinecap="round" fill="none" opacity="0.6"/>
@@ -99,20 +101,35 @@ export default function Login({ onLogin, registeredBuyers, superadminPassword }:
               </svg>
             </div>
           </div>
-        </div>
+        </motion.div>
 
         {/* Title */}
-        <div className="text-center mb-8">
+        <motion.div
+          className="text-center mb-8"
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ type: 'spring', stiffness: 300, damping: 26, delay: 0.07 }}
+        >
           <h1 className="text-3xl font-black tracking-tight text-[#1e293b] mb-1">
             S.O.S <span style={{ color: '#b388c4' }}>Ansiedade</span>
           </h1>
           <p className="text-xs text-gray-500 font-semibold">Seu espaço seguro de tranquilidade</p>
-        </div>
+        </motion.div>
 
         {/* Card */}
-        <div className="bg-white/80 backdrop-blur-md rounded-3xl shadow-xl border border-white/60 p-6">
+        <motion.div
+          className="bg-white/80 backdrop-blur-md rounded-3xl shadow-xl border border-white/60 p-6"
+          initial={{ opacity: 0, y: 20, scale: 0.97 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ type: 'spring', stiffness: 280, damping: 26, delay: 0.12 }}
+        >
           {success ? (
-            <div className="py-8 space-y-4 text-center animate-in zoom-in duration-300">
+            <motion.div
+              className="py-8 space-y-4 text-center"
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ type: 'spring', stiffness: 320, damping: 24 }}
+            >
               <div className="w-16 h-16 bg-emerald-100 text-emerald-500 rounded-full flex items-center justify-center mx-auto border border-emerald-200 shadow-sm">
                 <CheckCircle2 className="w-10 h-10" />
               </div>
@@ -123,7 +140,7 @@ export default function Login({ onLogin, registeredBuyers, superadminPassword }:
               <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
                 <div className="h-full rounded-full animate-pulse" style={{ width: '60%', background: 'linear-gradient(90deg, #b388c4, #a78bfa)' }} />
               </div>
-            </div>
+            </motion.div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-1.5">
@@ -135,7 +152,7 @@ export default function Login({ onLogin, registeredBuyers, superadminPassword }:
                     onChange={(e) => setEmailInput(e.target.value)}
                     placeholder="seu@email.com"
                     className="w-full bg-gray-50 border border-gray-200 rounded-2xl py-3.5 px-4 pr-10 text-sm focus:ring-2 focus:outline-none transition-all"
-                    style={{ '--tw-ring-color': '#b388c4' } as any}
+                    style={{ '--tw-ring-color': '#b388c4' } as React.CSSProperties}
                     onFocus={e => { e.target.style.borderColor = '#b388c4'; e.target.style.boxShadow = '0 0 0 3px rgba(179,136,196,0.15)'; }}
                     onBlur={e => { e.target.style.borderColor = '#e5e7eb'; e.target.style.boxShadow = 'none'; }}
                   />
@@ -163,20 +180,31 @@ export default function Login({ onLogin, registeredBuyers, superadminPassword }:
                 </div>
               </div>
 
-              {error && (
-                <div className="bg-rose-50 border border-rose-100 rounded-2xl p-4 flex gap-3 animate-in slide-in-from-top-2 duration-200">
-                  <ShieldAlert className="w-5 h-5 text-rose-400 flex-shrink-0 mt-0.5" />
-                  <p className="text-xs text-rose-700 leading-relaxed font-medium">{error}</p>
-                </div>
-              )}
+              <AnimatePresence mode="wait">
+                {error && (
+                  <motion.div
+                    key="error"
+                    initial={{ opacity: 0, y: -6, scale: 0.97 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -4, scale: 0.97 }}
+                    transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+                    className="bg-rose-50 border border-rose-100 rounded-2xl p-4 flex gap-3"
+                  >
+                    <ShieldAlert className="w-5 h-5 text-rose-400 flex-shrink-0 mt-0.5" />
+                    <p className="text-xs text-rose-700 leading-relaxed font-medium">{error}</p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
-              <button
+              <motion.button
                 type="submit"
-                className="w-full py-4 text-white rounded-2xl font-bold shadow-lg transition-all text-sm flex justify-center items-center gap-2 hover:opacity-90 active:scale-95"
+                className="w-full py-4 text-white rounded-2xl font-bold shadow-lg text-sm flex justify-center items-center gap-2"
                 style={{ background: 'linear-gradient(135deg, #b388c4 0%, #9d6eb5 100%)', boxShadow: '0 8px 24px rgba(179,136,196,0.4)' }}
+                whileTap={{ scale: 0.96 }}
+                transition={{ type: 'spring', stiffness: 500, damping: 30 }}
               >
                 Entrar no Aplicativo <ArrowRight className="w-4 h-4" />
-              </button>
+              </motion.button>
             </form>
           )}
 
@@ -190,17 +218,28 @@ export default function Login({ onLogin, registeredBuyers, superadminPassword }:
               Problemas com o acesso? Falar com o suporte
             </a>
           </div>
-        </div>
+        </motion.div>
 
         {/* Features teaser */}
-        <div className="mt-6 grid grid-cols-3 gap-2 text-center">
-          {[{ emoji: '🔥', text: 'Racha Diária' }, { emoji: '🏆', text: 'Conquistas' }, { emoji: '🧘', text: '6 Técnicas' }].map(f => (
-            <div key={f.text} className="bg-white/50 rounded-2xl p-3 border border-white/60">
+        <motion.div
+          className="mt-6 grid grid-cols-3 gap-2 text-center"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ type: 'spring', stiffness: 280, damping: 26, delay: 0.22 }}
+        >
+          {[{ emoji: '🔥', text: 'Racha Diária' }, { emoji: '🏆', text: 'Conquistas' }, { emoji: '🧘', text: '6 Técnicas' }].map((f, i) => (
+            <motion.div
+              key={f.text}
+              className="bg-white/50 rounded-2xl p-3 border border-white/60"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ type: 'spring', stiffness: 320, damping: 26, delay: 0.28 + i * 0.06 }}
+            >
               <div className="text-xl mb-1">{f.emoji}</div>
               <p className="text-[10px] font-bold text-gray-500">{f.text}</p>
-            </div>
+            </motion.div>
           ))}
-        </div>
+        </motion.div>
       </div>
     </div>
   );
