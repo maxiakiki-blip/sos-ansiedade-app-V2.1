@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { HeartPulse, AlertCircle, ShieldCheck, TrendingUp, LogOut, Users, Key, Flame, Star } from 'lucide-react';
 
 import { useLocalStorageState } from './hooks/useLocalStorageState';
@@ -11,6 +11,7 @@ import NavButton from './components/NavButton';
 import SecuritySettingsModal from './components/SecuritySettingsModal';
 import ConfettiEffect from './components/ConfettiEffect';
 import { Buyer, GamificationState, ALL_BADGES, getLevelInfo, getNextLevel } from './types';
+import * as db from './lib/db';
 
 const XP_TABLE: Record<string, number> = {
   'Respiração Tática': 30,
@@ -57,26 +58,47 @@ export default function App() {
     });
   }, [rawBuyers]);
 
-  React.useEffect(() => {
-    const fetchServerBuyers = async () => {
-      try {
-        const res = await fetch('/api/buyers');
-        if (res.ok) {
-          const serverBuyers = await res.json();
-          if (Array.isArray(serverBuyers)) {
-            setRawBuyers(prev => {
-              const localOnly = prev.filter(localB => {
-                const localEmail = typeof localB === 'string' ? localB : localB.email;
-                return !serverBuyers.some(serverB => serverB.email.toLowerCase() === localEmail.toLowerCase());
-              });
-              return [...localOnly, ...serverBuyers];
-            });
-          }
-        }
-      } catch {}
-    };
-    fetchServerBuyers();
+  // ── Load buyers from Supabase on mount ──
+  useEffect(() => {
+    db.fetchBuyers().then(serverBuyers => {
+      if (serverBuyers.length === 0) return;
+      setRawBuyers(prev => {
+        const localOnly = prev.filter(local => {
+          const localEmail = typeof local === 'string' ? local : local.email;
+          return !serverBuyers.some(s => s.email === localEmail?.toLowerCase());
+        });
+        return [...serverBuyers, ...localOnly];
+      });
+    }).catch(() => {});
   }, []);
+
+  // ── Load user data from Supabase on login ──
+  useEffect(() => {
+    if (!currentUserEmail) return;
+    Promise.all([
+      db.fetchUserLogs(currentUserEmail),
+      db.fetchUserMoods(currentUserEmail),
+      db.fetchGamification(currentUserEmail),
+    ]).then(([serverLogs, serverMoods, serverGamification]) => {
+      if (Object.keys(serverLogs).length > 0) {
+        setLogs(prev => {
+          const merged = { ...prev };
+          for (const [date, activities] of Object.entries(serverLogs)) {
+            merged[date] = [...new Set([...(merged[date] || []), ...activities])];
+          }
+          return merged;
+        });
+      }
+      if (Object.keys(serverMoods).length > 0) {
+        setMoods(prev => ({ ...serverMoods, ...prev }));
+      }
+      if (serverGamification && serverGamification.xp > 0) {
+        setGamification(prev =>
+          serverGamification.xp > prev.xp ? serverGamification : prev
+        );
+      }
+    }).catch(() => {});
+  }, [currentUserEmail]);
 
   const getTodayDate = () => new Date().toISOString().split('T')[0];
 
@@ -105,7 +127,6 @@ export default function App() {
     if (activityName === 'Caixa de Preocupações' && !updatedGamification.unlockedBadgeIds.includes('worry_released')) toUnlock.push('worry_released');
     if (activityName === 'Sons Relaxantes' && !updatedGamification.unlockedBadgeIds.includes('sound_healer')) toUnlock.push('sound_healer');
     if (activityName === 'Leitura Motivacional' && !updatedGamification.unlockedBadgeIds.includes('motivation_read')) toUnlock.push('motivation_read');
-
     if (updatedGamification.xp >= 100 && !updatedGamification.unlockedBadgeIds.includes('xp_100')) toUnlock.push('xp_100');
     if (updatedGamification.xp >= 500 && !updatedGamification.unlockedBadgeIds.includes('xp_500')) toUnlock.push('xp_500');
     if (updatedGamification.streak >= 3 && !updatedGamification.unlockedBadgeIds.includes('streak_3')) toUnlock.push('streak_3');
@@ -117,14 +138,12 @@ export default function App() {
     if (hasBreath && hasGround && hasButterfly && !updatedGamification.unlockedBadgeIds.includes('sos_protocol')) toUnlock.push('sos_protocol');
 
     toUnlock.forEach(id => {
-      if (!updatedGamification.unlockedBadgeIds.includes(id)) {
-        setGamification(prev => {
-          if (prev.unlockedBadgeIds.includes(id)) return prev;
-          setNewBadge(id);
-          setTimeout(() => setNewBadge(null), 3500);
-          return { ...prev, unlockedBadgeIds: [...prev.unlockedBadgeIds, id] };
-        });
-      }
+      setGamification(prev => {
+        if (prev.unlockedBadgeIds.includes(id)) return prev;
+        setNewBadge(id);
+        setTimeout(() => setNewBadge(null), 3500);
+        return { ...prev, unlockedBadgeIds: [...prev.unlockedBadgeIds, id] };
+      });
     });
   }, []);
 
@@ -149,10 +168,10 @@ export default function App() {
       const yesterdayStr = yesterday.toISOString().split('T')[0];
 
       if (prev.lastActivityDate === today) {
-        // same day, no streak change
+        // same day
       } else if (prev.lastActivityDate === yesterdayStr) {
         newStreak = prev.streak + 1;
-      } else if (prev.lastActivityDate !== today) {
+      } else {
         newStreak = 1;
       }
 
@@ -164,52 +183,64 @@ export default function App() {
         unlockedBadgeIds: prev.unlockedBadgeIds,
       };
 
-      // Check badges after state is updated
       setTimeout(() => checkBadges(activityName, updated, newLogs), 100);
+
+      // Sync to Supabase
+      if (currentUserEmail) {
+        db.upsertGamification(currentUserEmail, updated).catch(() => {});
+        db.insertActivityLog(currentUserEmail, activityName, today).catch(() => {});
+      }
 
       return updated;
     });
 
     triggerConfetti();
-  }, [checkBadges]);
+  }, [checkBadges, currentUserEmail]);
 
   const logMood = (moodId: string) => {
     const today = getTodayDate();
     setMoods(prev => ({ ...prev, [today]: moodId }));
+    if (currentUserEmail) {
+      db.upsertMood(currentUserEmail, moodId, today).catch(() => {});
+    }
   };
 
-  const handleAddBuyer = async (buyer: Buyer) => {
+  const handleAddBuyer = (buyer: Buyer) => {
     setRawBuyers(prev => {
-      const updated = prev.filter(b => {
+      const filtered = prev.filter(b => {
         const email = typeof b === 'string' ? b : b.email;
-        return email.trim().toLowerCase() !== buyer.email.toLowerCase();
+        return email?.trim().toLowerCase() !== buyer.email.toLowerCase();
       });
-      return [...updated, buyer];
+      return [...filtered, buyer];
     });
-    try {
-      await fetch('/api/buyers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(buyer) });
-    } catch {}
+    db.upsertBuyer(buyer).catch(() => {});
   };
 
-  const handleRemoveBuyer = async (email: string) => {
+  const handleRemoveBuyer = (email: string) => {
     setRawBuyers(prev => prev.filter(b => {
       const bEmail = typeof b === 'string' ? b : b.email;
-      return bEmail.trim().toLowerCase() !== email.trim().toLowerCase();
+      return bEmail?.trim().toLowerCase() !== email.trim().toLowerCase();
     }));
-    try { await fetch(`/api/buyers/${encodeURIComponent(email)}`, { method: 'DELETE' }); } catch {}
+    db.deleteBuyer(email).catch(() => {});
   };
 
-  const handleUpdateBuyerPassword = async (email: string, newPass: string) => {
+  const handleUpdateBuyerPassword = (email: string, newPass: string) => {
     setRawBuyers(prev => prev.map(b => {
       const bEmail = typeof b === 'string' ? b : b.email;
-      if (bEmail.trim().toLowerCase() === email.trim().toLowerCase()) {
+      if (bEmail?.trim().toLowerCase() === email.trim().toLowerCase()) {
         const name = typeof b === 'string' ? 'Comprador' : b.name;
         const regDate = typeof b === 'string' ? new Date().toLocaleDateString('pt-BR') : b.registrationDate;
-        return { email: email.trim().toLowerCase(), password: newPass, name: name || 'Comprador', registrationDate: regDate || new Date().toLocaleDateString('pt-BR') };
+        return { email: email.trim().toLowerCase(), password: newPass, name: name || 'Comprador', registrationDate: regDate };
       }
       return b;
     }));
-    try { await fetch(`/api/buyers/${encodeURIComponent(email)}/password`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: newPass }) }); } catch {}
+    const buyer = registeredBuyers.find(b => b.email === email.trim().toLowerCase());
+    if (buyer) db.upsertBuyer({ ...buyer, password: newPass }).catch(() => {});
+  };
+
+  const handleImportBuyers = (buyers: Buyer[]) => {
+    setRawBuyers(buyers);
+    buyers.forEach(b => db.upsertBuyer(b).catch(() => {}));
   };
 
   const handleLogout = () => { setCurrentUserEmail(null); setActiveTab('rescate'); };
@@ -221,7 +252,7 @@ export default function App() {
           const cleanEmail = email.trim().toLowerCase();
           const exists = registeredBuyers.some(b => b.email.trim().toLowerCase() === cleanEmail);
           if (!exists && cleanEmail !== 'maxiakiki@hotmail.com') {
-            await handleAddBuyer({ email: cleanEmail, name: 'Comprador SOS', password: 'CodE:1243', registrationDate: new Date().toLocaleDateString('pt-BR') });
+            handleAddBuyer({ email: cleanEmail, name: 'Comprador SOS', password: 'CodE:1243', registrationDate: new Date().toLocaleDateString('pt-BR') });
           }
           setCurrentUserEmail(cleanEmail);
         }}
@@ -259,10 +290,8 @@ export default function App() {
         .xp-bar-fill { background: linear-gradient(90deg, #b388c4, #a78bfa, #60a5fa, #b388c4); background-size: 200%; animation: xp-shimmer 2s linear infinite; }
       `}</style>
 
-      {/* CONFETTI */}
       <ConfettiEffect active={showConfetti} />
 
-      {/* BADGE NOTIFICATION */}
       {notifiedBadge && (
         <div className="fixed bottom-28 left-1/2 -translate-x-1/2 z-50 badge-notify">
           <div className="bg-gradient-to-r from-[#1e293b] to-[#334155] text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 border border-white/10 min-w-[260px]">
@@ -276,7 +305,6 @@ export default function App() {
         </div>
       )}
 
-      {/* HEADER */}
       <header className="bg-white/80 backdrop-blur-md p-4 shadow-sm sticky top-0 z-40 border-b border-[#EAE0F1]/80">
         <div className="max-w-md mx-auto">
           <div className="flex items-center justify-between gap-2 mb-2">
@@ -294,7 +322,6 @@ export default function App() {
               </span>
             </div>
 
-            {/* STREAK + XP INDICATORS */}
             <div className="flex items-center gap-2">
               {gamification.streak > 0 && (
                 <div className="flex items-center gap-1 bg-orange-50 border border-orange-200/60 px-2.5 py-1 rounded-full">
@@ -311,34 +338,25 @@ export default function App() {
                   Admin
                 </span>
               )}
-              <button
-                onClick={() => setIsSecurityModalOpen(true)}
-                title="Segurança"
-                className="p-1 text-gray-400 hover:text-[#b388c4] rounded-lg transition-colors flex items-center gap-0.5 text-[10px] font-bold"
-              >
+              <button onClick={() => setIsSecurityModalOpen(true)} title="Segurança"
+                className="p-1 text-gray-400 hover:text-[#b388c4] rounded-lg transition-colors">
                 <Key className="w-3.5 h-3.5" />
               </button>
-              <button
-                onClick={handleLogout}
-                title="Sair"
-                className="p-1 text-gray-400 hover:text-rose-500 rounded-lg transition-colors"
-              >
+              <button onClick={handleLogout} title="Sair"
+                className="p-1 text-gray-400 hover:text-rose-500 rounded-lg transition-colors">
                 <LogOut className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
 
-          {/* XP PROGRESS BAR */}
           <div className="flex items-center gap-2">
             <span className="text-[9px] font-black text-gray-400 uppercase tracking-wider whitespace-nowrap"
               style={{ color: levelInfo.color }}>
               {levelInfo.name}
             </span>
             <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-              <div
-                className="h-full rounded-full xp-bar-fill transition-all duration-700"
-                style={{ width: `${Math.max(2, xpProgress)}%` }}
-              />
+              <div className="h-full rounded-full xp-bar-fill transition-all duration-700"
+                style={{ width: `${Math.max(2, xpProgress)}%` }} />
             </div>
             {nextLevel && (
               <span className="text-[9px] font-bold text-gray-400 whitespace-nowrap">{nextLevel.name} →</span>
@@ -347,22 +365,13 @@ export default function App() {
         </div>
       </header>
 
-      {/* MAIN CONTENT */}
       <main className="max-w-md mx-auto p-4">
         {activeTab === 'rescate' && <TabRescate logActivity={logActivity} />}
         {activeTab === 'prevencion' && (
-          <TabPrevencion
-            logActivity={logActivity}
-            logMood={logMood}
-            currentMood={moods[getTodayDate()]}
-          />
+          <TabPrevencion logActivity={logActivity} logMood={logMood} currentMood={moods[getTodayDate()]} />
         )}
         {activeTab === 'progreso' && (
-          <TabProgreso
-            logs={logs}
-            moods={moods}
-            gamification={gamification}
-          />
+          <TabProgreso logs={logs} moods={moods} gamification={gamification} />
         )}
         {activeTab === 'admin' && isSuperadmin && (
           <TabAdmin
@@ -372,12 +381,11 @@ export default function App() {
             superadminEmail="maxiakiki@hotmail.com"
             superadminPassword={superadminPassword}
             onChangeSuperadminPassword={setSuperadminPassword}
-            onImportBuyers={(buyers) => setRawBuyers(buyers)}
+            onImportBuyers={handleImportBuyers}
           />
         )}
       </main>
 
-      {/* BOTTOM NAVIGATION */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-gray-100/80 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] z-40">
         <div className="max-w-md mx-auto flex justify-around">
           <NavButton icon={<AlertCircle className="w-5 h-5" />} label="Resgate" isActive={activeTab === 'rescate'} onClick={() => setActiveTab('rescate')} />
