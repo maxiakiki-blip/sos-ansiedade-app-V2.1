@@ -279,53 +279,79 @@ export default function ButterflyHug({ onBack, logActivity }: ButterflyHugProps)
           </div>
         </div>
 
-        {/* Visual — pulsing sides */}
-        <div className="flex gap-4 w-full max-w-xs mb-6">
-          {(['left', 'right'] as const).map(side => (
+        {/* Illustration with pulsing shoulders */}
+        <div className="relative flex items-center justify-center mb-4">
+          <svg viewBox="0 0 160 200" width="200" height="240" fill="none" xmlns="http://www.w3.org/2000/svg">
+            {/* Body */}
+            <ellipse cx="80" cy="160" rx="38" ry="30" fill="#f1f5f9" />
+            {/* Torso */}
+            <rect x="60" y="100" width="40" height="50" rx="8" fill="#f1f5f9" />
+            {/* Neck */}
+            <rect x="73" y="88" width="14" height="16" rx="4" fill="#f1f5f9" />
+            {/* Head */}
+            <circle cx="80" cy="72" r="24" fill="#f8fafc" stroke="#e2e8f0" strokeWidth="1.5" />
+            {/* Eyes closed */}
+            <path d="M70 70 Q74 73 78 70" stroke="#94a3b8" strokeWidth="1.5" strokeLinecap="round" fill="none"/>
+            <path d="M82 70 Q86 73 90 70" stroke="#94a3b8" strokeWidth="1.5" strokeLinecap="round" fill="none"/>
+            {/* Smile */}
+            <path d="M74 78 Q80 83 86 78" stroke="#cbd5e1" strokeWidth="1.5" strokeLinecap="round" fill="none"/>
+
+            {/* LEFT arm crossing to RIGHT shoulder */}
+            <path d="M62 110 Q58 105 52 100 Q44 94 60 90 Q70 88 88 92"
+              stroke="#b388c4" strokeWidth="8" strokeLinecap="round" fill="none"/>
+            {/* RIGHT arm crossing to LEFT shoulder */}
+            <path d="M98 110 Q102 105 108 100 Q116 94 100 90 Q90 88 72 92"
+              stroke="#60a5fa" strokeWidth="8" strokeLinecap="round" fill="none"/>
+
+            {/* RIGHT shoulder hand (left arm) — pulses when activeSide === 'left' */}
+            <circle cx="90" cy="92" r={activeSide === 'left' ? 11 : 9}
+              fill="#b388c4" opacity={activeSide === 'left' ? 1 : 0.55}
+              style={{ transition: 'r 0.15s ease, opacity 0.15s ease' }} />
+            <text x="90" y="97" textAnchor="middle" fontSize="11" fill="white">🤚</text>
+
+            {/* LEFT shoulder hand (right arm) — pulses when activeSide === 'right' */}
+            <circle cx="70" cy="92" r={activeSide === 'right' ? 11 : 9}
+              fill="#60a5fa" opacity={activeSide === 'right' ? 1 : 0.55}
+              style={{ transition: 'r 0.15s ease, opacity 0.15s ease' }} />
+            <text x="70" y="97" textAnchor="middle" fontSize="11" fill="white">🤚</text>
+
+            {/* Butterfly wings */}
+            <path d="M80 125 Q55 110 45 125 Q50 140 80 130" fill="#b388c4" opacity="0.08"/>
+            <path d="M80 125 Q105 110 115 125 Q110 140 80 130" fill="#60a5fa" opacity="0.08"/>
+          </svg>
+
+          {/* Ripple on active shoulder */}
+          <AnimatePresence>
             <motion.div
-              key={side}
-              className="flex-1 rounded-3xl flex flex-col items-center justify-center py-10 border-2 relative overflow-hidden"
-              animate={
-                activeSide === side
-                  ? {
-                      borderColor: side === 'left' ? '#3b82f6' : '#b388c4',
-                      backgroundColor: side === 'left' ? '#eff6ff' : '#faf5ff',
-                      scale: 1.04,
-                    }
-                  : { borderColor: '#e5e7eb', backgroundColor: '#fafafa', scale: 1 }
-              }
-              transition={{ type: 'spring', stiffness: 500, damping: 28 }}
-            >
-              <AnimatePresence>
-                {activeSide === side && (
-                  <motion.div
-                    className="absolute inset-0 rounded-3xl"
-                    initial={{ opacity: 0.5, scale: 0.5 }}
-                    animate={{ opacity: 0, scale: 1.4 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.5 }}
-                    style={{ background: `radial-gradient(circle, ${side === 'left' ? '#3b82f6' : '#b388c4'}, transparent)` }}
-                  />
-                )}
-              </AnimatePresence>
-              <motion.span
-                className="text-4xl mb-2"
-                animate={activeSide === side ? { scale: 1.25 } : { scale: 1 }}
-                transition={{ type: 'spring', stiffness: 500, damping: 22 }}
-              >
-                {side === 'left' ? '🤚' : '🤚'}
-              </motion.span>
-              <span className="text-[10px] font-black" style={{ color: activeSide === side ? (side === 'left' ? '#3b82f6' : '#b388c4') : '#cbd5e1' }}>
-                {side === 'left' ? 'ESQUERDA' : 'DIREITA'}
-              </span>
-            </motion.div>
-          ))}
+              key={activeSide}
+              className="absolute rounded-full pointer-events-none"
+              style={{
+                width: 32, height: 32,
+                background: activeSide === 'left' ? '#b388c4' : '#60a5fa',
+                // right shoulder is at ~90/160 in 200px wide SVG → roughly 56% from left in 200px = 112px
+                // left shoulder is at ~70/160 → ~44% = 88px
+                left: activeSide === 'left' ? '53%' : '36%',
+                top: '34%',
+                transform: 'translate(-50%, -50%)',
+              }}
+              initial={{ opacity: 0.6, scale: 0.6 }}
+              animate={{ opacity: 0, scale: 2.2 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.7, ease: 'easeOut' }}
+            />
+          </AnimatePresence>
         </div>
 
-        {/* Instruction reminder */}
-        <p className="text-xs text-gray-400 text-center mb-6 max-w-[220px]">
-          Braços cruzados no peito — siga o ritmo tocando alternado nos ombros
-        </p>
+        {/* Side label */}
+        <AnimatePresence mode="wait">
+          <motion.div key={activeSide}
+            initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.2 }}
+            className="text-xs font-black uppercase tracking-widest mb-5"
+            style={{ color: activeSide === 'left' ? '#b388c4' : '#60a5fa' }}>
+            {activeSide === 'left' ? '← Ombro direito' : 'Ombro esquerdo →'}
+          </motion.div>
+        </AnimatePresence>
 
         {/* Pause/resume */}
         <motion.button
