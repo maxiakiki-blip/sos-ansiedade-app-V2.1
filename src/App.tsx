@@ -43,6 +43,8 @@ export default function App() {
   const [logs, setLogs] = useLocalStorageState<Record<string, string[]>>('sos_ansiedad_logs', {});
   const [moods, setMoods] = useLocalStorageState<Record<string, string>>('sos_ansiedad_moods', {});
   const [gamification, setGamification] = useLocalStorageState<GamificationState>('sos_gamification', DEFAULT_GAMIFICATION);
+  // Raw session counts — tracks every repetition, regardless of XP dedup
+  const [activityCounts, setActivityCounts] = useLocalStorageState<Record<string, Record<string, number>>>('sos_activity_counts', {});
 
   const [currentUserEmail, setCurrentUserEmail] = useLocalStorageState<string | null>('sos_user_email', null);
   const [rawBuyers, setRawBuyers] = useLocalStorageState<any[]>('sos_registered_buyers', []);
@@ -153,10 +155,17 @@ export default function App() {
     if (activityName === 'Caixa de Preocupações' && !updatedGamification.unlockedBadgeIds.includes('worry_released')) toUnlock.push('worry_released');
     if (activityName === 'Sons Relaxantes' && !updatedGamification.unlockedBadgeIds.includes('sound_healer')) toUnlock.push('sound_healer');
     if (activityName === 'Leitura Motivacional' && !updatedGamification.unlockedBadgeIds.includes('motivation_read')) toUnlock.push('motivation_read');
-    if (updatedGamification.xp >= 100 && !updatedGamification.unlockedBadgeIds.includes('xp_100')) toUnlock.push('xp_100');
-    if (updatedGamification.xp >= 500 && !updatedGamification.unlockedBadgeIds.includes('xp_500')) toUnlock.push('xp_500');
-    if (updatedGamification.streak >= 3 && !updatedGamification.unlockedBadgeIds.includes('streak_3')) toUnlock.push('streak_3');
-    if (updatedGamification.streak >= 7 && !updatedGamification.unlockedBadgeIds.includes('streak_7')) toUnlock.push('streak_7');
+    if (updatedGamification.xp >= 100  && !updatedGamification.unlockedBadgeIds.includes('xp_100'))   toUnlock.push('xp_100');
+    if (updatedGamification.xp >= 500  && !updatedGamification.unlockedBadgeIds.includes('xp_500'))   toUnlock.push('xp_500');
+    if (updatedGamification.xp >= 1000 && !updatedGamification.unlockedBadgeIds.includes('xp_1000'))  toUnlock.push('xp_1000');
+    if (updatedGamification.streak >= 3  && !updatedGamification.unlockedBadgeIds.includes('streak_3'))  toUnlock.push('streak_3');
+    if (updatedGamification.streak >= 7  && !updatedGamification.unlockedBadgeIds.includes('streak_7'))  toUnlock.push('streak_7');
+    if (updatedGamification.streak >= 14 && !updatedGamification.unlockedBadgeIds.includes('streak_14')) toUnlock.push('streak_14');
+    if (updatedGamification.streak >= 30 && !updatedGamification.unlockedBadgeIds.includes('streak_30')) toUnlock.push('streak_30');
+    const totalSessions = Object.values(allLogs).flat().length;
+    if (totalSessions >= 10 && !updatedGamification.unlockedBadgeIds.includes('sessions_10')) toUnlock.push('sessions_10');
+    if (totalSessions >= 25 && !updatedGamification.unlockedBadgeIds.includes('sessions_25')) toUnlock.push('sessions_25');
+    if (totalSessions >= 50 && !updatedGamification.unlockedBadgeIds.includes('sessions_50')) toUnlock.push('sessions_50');
 
     const hasBreath = flatActivities.includes('Respiração Tática');
     const hasGround = flatActivities.includes('Conexão Sensorial 5-4-3-2-1');
@@ -166,9 +175,20 @@ export default function App() {
     toUnlock.forEach(id => {
       setGamification(prev => {
         if (prev.unlockedBadgeIds.includes(id)) return prev;
+        const newIds = [...prev.unlockedBadgeIds, id];
         setNewBadge(id);
         setTimeout(() => setNewBadge(null), 3500);
-        return { ...prev, unlockedBadgeIds: [...prev.unlockedBadgeIds, id] };
+        // Check grand_master: all badges except itself
+        const allOtherIds = ALL_BADGES.filter(b => b.id !== 'grand_master').map(b => b.id);
+        const allUnlocked = allOtherIds.every(bid => newIds.includes(bid));
+        if (allUnlocked && !newIds.includes('grand_master')) {
+          setTimeout(() => {
+            setGamification(g => ({ ...g, unlockedBadgeIds: [...g.unlockedBadgeIds, 'grand_master'] }));
+            setNewBadge('grand_master');
+            setTimeout(() => setNewBadge(null), 5000);
+          }, 2000);
+        }
+        return { ...prev, unlockedBadgeIds: newIds };
       });
     });
   }, []);
@@ -177,9 +197,15 @@ export default function App() {
     const today = getTodayDate();
     let newLogs: Record<string, string[]> = {};
 
+    // Always increment session count (tracks repetitions)
+    setActivityCounts(prev => {
+      const dayCounts = prev[today] || {};
+      return { ...prev, [today]: { ...dayCounts, [activityName]: (dayCounts[activityName] || 0) + 1 } };
+    });
+
     setLogs(prev => {
       const todayLogs = prev[today] || [];
-      if (todayLogs.includes(activityName)) return prev;
+      if (todayLogs.includes(activityName)) return prev; // XP only once per day
       newLogs = { ...prev, [today]: [...todayLogs, activityName] };
       return newLogs;
     });
@@ -430,7 +456,7 @@ export default function App() {
               <TabPrevencion logActivity={logActivity} logMood={logMood} currentMood={moods[getTodayDate()]} />
             )}
             {activeTab === 'progreso' && (
-              <TabProgreso logs={logs} moods={moods} gamification={gamification} />
+              <TabProgreso logs={logs} moods={moods} gamification={gamification} activityCounts={activityCounts} />
             )}
             {activeTab === 'admin' && isSuperadmin && (
               <TabAdmin
