@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Wind, Volume2, VolumeX, ArrowLeft, CheckCircle2, ChevronRight, RotateCcw, Trophy } from 'lucide-react';
+import { Wind, Volume2, VolumeX, ArrowLeft, ChevronRight, RotateCcw, Trophy } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface BreathingExerciseProps {
   onBack: () => void;
@@ -10,11 +11,32 @@ interface BreathingExerciseProps {
 type BreathingPhase = 'inhale' | 'hold_full' | 'exhale' | 'hold_empty';
 
 const PHASE_CONFIG = {
-  inhale:     { title: 'INSPIRAR',  subtitle: 'Inspire suave e continuamente',    color: '#3b82f6', bg: 'rgba(59,130,246,0.12)',  scale: 1.35, label: 'bg-blue-400'   },
-  hold_full:  { title: 'SEGURAR',   subtitle: 'Segure com os pulmões cheios',     color: '#10b981', bg: 'rgba(16,185,129,0.12)', scale: 1.25, label: 'bg-emerald-400' },
-  exhale:     { title: 'EXPIRAR',   subtitle: 'Solte lentamente pela boca',       color: '#b388c4', bg: 'rgba(179,136,196,0.12)', scale: 0.85, label: 'bg-purple-400'  },
-  hold_empty: { title: 'RETER',     subtitle: 'Fique sem ar em vazio absoluto',   color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', scale: 0.7,  label: 'bg-amber-400'   },
+  inhale:     { title: 'INSPIRAR',  subtitle: 'Inspire suave e continuamente',    color: '#3b82f6', bg: 'rgba(59,130,246,0.12)',  scale: 1.35 },
+  hold_full:  { title: 'SEGURAR',   subtitle: 'Segure com os pulmões cheios',     color: '#10b981', bg: 'rgba(16,185,129,0.12)', scale: 1.25 },
+  exhale:     { title: 'EXPIRAR',   subtitle: 'Solte lentamente pela boca',       color: '#b388c4', bg: 'rgba(179,136,196,0.12)', scale: 0.85 },
+  hold_empty: { title: 'RETER',     subtitle: 'Fique sem ar em vazio absoluto',   color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', scale: 0.7  },
 };
+
+const PHASES_ORDER: BreathingPhase[] = ['inhale', 'hold_full', 'exhale', 'hold_empty'];
+const TOTAL_CYCLES = 4;
+
+function playCompletionSound(audioCtx: AudioContext) {
+  const notes = [523, 659, 784, 1047]; // C5, E5, G5, C6
+  notes.forEach((freq, i) => {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+    const start = audioCtx.currentTime + i * 0.18;
+    gain.gain.setValueAtTime(0, start);
+    gain.gain.linearRampToValueAtTime(0.18, start + 0.05);
+    gain.gain.exponentialRampToValueAtTime(0.001, start + 0.6);
+    osc.start(start);
+    osc.stop(start + 0.7);
+  });
+}
 
 export default function BreathingExercise({ onBack, logActivity, onComplete }: BreathingExerciseProps) {
   const [phase, setPhase] = useState<BreathingPhase>('inhale');
@@ -22,10 +44,19 @@ export default function BreathingExercise({ onBack, logActivity, onComplete }: B
   const [cyclesCompleted, setCyclesCompleted] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [isRunning, setIsRunning] = useState(true);
+  const [done, setDone] = useState(false);
 
   const audioCtxRef = useRef<AudioContext | null>(null);
   const oscRef = useRef<OscillatorNode | null>(null);
   const gainRef = useRef<GainNode | null>(null);
+
+  const getAudioCtx = () => {
+    if (!audioCtxRef.current) {
+      audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
+    return audioCtxRef.current;
+  };
 
   const stopOscillator = () => {
     try { oscRef.current?.stop(); } catch {}
@@ -35,12 +66,11 @@ export default function BreathingExercise({ onBack, logActivity, onComplete }: B
     gainRef.current = null;
   };
 
+  // Breathing sound
   useEffect(() => {
-    if (!isRunning || isMuted || cyclesCompleted >= 4) { stopOscillator(); return; }
+    if (!isRunning || isMuted || done) { stopOscillator(); return; }
     try {
-      if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const ctx = audioCtxRef.current;
-      if (ctx.state === 'suspended') ctx.resume();
+      const ctx = getAudioCtx();
       stopOscillator();
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
@@ -72,40 +102,54 @@ export default function BreathingExercise({ onBack, logActivity, onComplete }: B
       gainRef.current = gain;
     } catch {}
     return () => { stopOscillator(); };
-  }, [phase, isMuted, isRunning, cyclesCompleted]);
+  }, [phase, isMuted, isRunning, done]);
 
+  // Timer tick
   useEffect(() => {
-    if (!isRunning) return;
+    if (!isRunning || done) return;
     const interval = setInterval(() => {
       setSecondsLeft(prev => prev <= 1 ? 0 : prev - 1);
     }, 1000);
-    return () => { clearInterval(interval); stopOscillator(); };
-  }, [isRunning]);
+    return () => clearInterval(interval);
+  }, [isRunning, done]);
 
+  // Phase transition — fixed: no side effects inside state updater
   useEffect(() => {
-    if (secondsLeft === 0) {
-      setPhase(curr => {
-        switch (curr) {
-          case 'inhale':     return 'hold_full';
-          case 'hold_full':  return 'exhale';
-          case 'exhale':     return 'hold_empty';
-          case 'hold_empty': setCyclesCompleted(p => p + 1); return 'inhale';
-          default:           return 'inhale';
+    if (secondsLeft !== 0) return;
+    const currentIndex = PHASES_ORDER.indexOf(phase);
+    const nextPhase = PHASES_ORDER[(currentIndex + 1) % 4];
+
+    if (phase === 'hold_empty') {
+      const newCycles = cyclesCompleted + 1;
+      setCyclesCompleted(newCycles);
+      if (newCycles >= TOTAL_CYCLES) {
+        stopOscillator();
+        setDone(true);
+        logActivity('Respiração Tática');
+        if (!isMuted) {
+          try { playCompletionSound(getAudioCtx()); } catch {}
         }
-      });
-      setSecondsLeft(4);
+        return;
+      }
     }
+
+    setPhase(nextPhase);
+    setSecondsLeft(4);
   }, [secondsLeft]);
 
-  useEffect(() => {
-    if (cyclesCompleted >= 4) logActivity('Respiração Tática');
-  }, [cyclesCompleted]);
-
   const cfg = PHASE_CONFIG[phase];
+  const ringProgress = ((4 - secondsLeft) / 4) * 100;
+  const circumference = 282.7;
+  const strokeDashoffset = circumference - (circumference * ringProgress) / 100;
 
-  if (cyclesCompleted >= 4) {
+  if (done) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[65vh] text-center p-6 animate-in zoom-in duration-300">
+      <motion.div
+        className="flex flex-col items-center justify-center min-h-[65vh] text-center p-6"
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ type: 'spring', stiffness: 280, damping: 24 }}
+      >
         <style>{`@keyframes trophy-bounce { 0%,100%{transform:translateY(0) rotate(-5deg)}50%{transform:translateY(-10px) rotate(5deg)} } .trophy-anim{animation:trophy-bounce 1.5s ease-in-out infinite}`}</style>
         <div className="w-24 h-24 rounded-full flex items-center justify-center mb-6 shadow-lg trophy-anim"
           style={{ background: 'linear-gradient(135deg, #fbbf24, #f59e0b)' }}>
@@ -113,41 +157,42 @@ export default function BreathingExercise({ onBack, logActivity, onComplete }: B
         </div>
         <h2 className="text-2xl font-black mb-2 text-[#1e293b]">Sessão Concluída!</h2>
         <div className="flex items-center gap-2 mb-4">
-          <span className="bg-emerald-100 text-emerald-700 text-xs font-black px-3 py-1.5 rounded-full border border-emerald-200">🎯 {cyclesCompleted} ciclos perfeitos</span>
+          <span className="bg-emerald-100 text-emerald-700 text-xs font-black px-3 py-1.5 rounded-full border border-emerald-200">🎯 {TOTAL_CYCLES} ciclos perfeitos</span>
           <span className="bg-[#F5EFFF] text-[#b388c4] text-xs font-black px-3 py-1.5 rounded-full border border-[#b388c4]/20">+30 XP</span>
         </div>
         <p className="text-gray-500 mb-8 text-sm leading-relaxed max-w-sm">
-          Você regulou seu pulso de forma maravilhosa. O estado de agitação diminuiu visivelmente. O que deseja fazer agora?
+          Você regulou seu pulso de forma maravilhosa. O estado de agitação diminuiu visivelmente.
         </p>
         <div className="w-full space-y-3">
-          <button onClick={onComplete}
-            className="w-full py-4 text-white rounded-2xl font-bold shadow-lg flex items-center justify-center gap-2 transition-opacity hover:opacity-90"
-            style={{ background: 'linear-gradient(135deg, #b388c4, #9d6eb5)' }}>
+          <motion.button
+            onClick={onComplete}
+            whileTap={{ scale: 0.97 }}
+            className="w-full py-4 text-white rounded-2xl font-bold shadow-lg flex items-center justify-center gap-2"
+            style={{ background: 'linear-gradient(135deg, #b388c4, #9d6eb5)' }}
+          >
             Próximo: Conexão Sensorial 5-4-3-2-1 <ChevronRight className="w-5 h-5" />
-          </button>
-          <button onClick={() => { setCyclesCompleted(0); setPhase('inhale'); setSecondsLeft(4); setIsRunning(true); }}
-            className="w-full py-4 bg-white text-gray-700 border border-gray-200 rounded-2xl font-bold hover:bg-gray-50 transition-colors flex items-center justify-center gap-2">
+          </motion.button>
+          <button
+            onClick={() => { setCyclesCompleted(0); setPhase('inhale'); setSecondsLeft(4); setIsRunning(true); setDone(false); }}
+            className="w-full py-4 bg-white text-gray-700 border border-gray-200 rounded-2xl font-bold flex items-center justify-center gap-2"
+          >
             <RotateCcw className="w-4 h-4" /> Repetir Respiração
           </button>
           <button onClick={onBack}
-            className="w-full py-4 bg-[#1e293b] text-white rounded-2xl font-bold hover:bg-black transition-colors">
+            className="w-full py-4 bg-[#1e293b] text-white rounded-2xl font-bold">
             Voltar ao Painel
           </button>
         </div>
-      </div>
+      </motion.div>
     );
   }
 
-  const orbScale = cfg.scale;
-  const ringProgress = ((5 - secondsLeft) / 4) * 100;
-  const circumference = 282.7;
-  const strokeDashoffset = circumference - (circumference * ringProgress) / 100;
-
   return (
-    <div className="animate-in fade-in h-full flex flex-col justify-between pb-8">
+    <div className="h-full flex flex-col justify-between pb-8">
+      {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <button onClick={onBack}
-          className="p-2.5 bg-white rounded-full shadow-sm border border-gray-100 hover:bg-gray-50">
+          className="p-2.5 bg-white rounded-full shadow-sm border border-gray-100">
           <ArrowLeft className="w-5 h-5 text-gray-500" />
         </button>
         <div className="text-center">
@@ -155,29 +200,55 @@ export default function BreathingExercise({ onBack, logActivity, onComplete }: B
           <span className="font-bold text-sm text-[#1e293b]">Respiração Tática</span>
         </div>
         <button onClick={() => setIsMuted(!isMuted)}
-          className="p-2.5 bg-white rounded-full shadow-sm border border-gray-100 hover:bg-gray-50">
+          className="p-2.5 bg-white rounded-full shadow-sm border border-gray-100">
           {isMuted ? <VolumeX className="w-5 h-5 text-rose-400" /> : <Volume2 className="w-5 h-5 text-[#b388c4]" />}
         </button>
       </div>
 
       <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 flex-1 flex flex-col items-center py-8">
-        {/* Cycle progress */}
-        <div className="w-full max-w-xs mb-6 bg-gray-50 rounded-2xl p-4 border border-gray-100">
-          <div className="flex justify-between text-[11px] font-black text-gray-500 mb-2">
-            <span>CICLOS</span>
-            <span style={{ color: cfg.color }}>{cyclesCompleted} de 4</span>
+
+        {/* CYCLE COUNTER — grande y visible */}
+        <div className="w-full max-w-xs mb-6">
+          <div className="flex justify-between items-center mb-3">
+            <span className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Ciclos</span>
+            <AnimatePresence mode="wait">
+              <motion.span
+                key={cyclesCompleted}
+                initial={{ opacity: 0, y: -8, scale: 0.8 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 8 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 24 }}
+                className="text-2xl font-black tabular-nums"
+                style={{ color: cfg.color }}
+              >
+                {cyclesCompleted}<span className="text-sm text-gray-300 font-bold"> / {TOTAL_CYCLES}</span>
+              </motion.span>
+            </AnimatePresence>
           </div>
-          <div className="flex gap-1.5">
-            {[0,1,2,3].map(i => (
-              <div key={i} className="flex-1 h-2 rounded-full transition-all duration-700"
-                style={{ background: cyclesCompleted > i ? '#10b981' : cyclesCompleted === i ? cfg.color : '#e5e7eb' }} />
+
+          {/* Ciclos como círculos grandes */}
+          <div className="flex gap-2 justify-center">
+            {Array.from({ length: TOTAL_CYCLES }).map((_, i) => (
+              <motion.div
+                key={i}
+                className="w-12 h-12 rounded-full flex items-center justify-center border-2 font-black text-sm"
+                animate={
+                  cyclesCompleted > i
+                    ? { background: '#10b981', borderColor: '#10b981', color: '#ffffff', scale: 1 }
+                    : cyclesCompleted === i
+                    ? { background: cfg.bg, borderColor: cfg.color, color: cfg.color, scale: 1.1 }
+                    : { background: '#f8fafc', borderColor: '#e5e7eb', color: '#cbd5e1', scale: 1 }
+                }
+                transition={{ type: 'spring', stiffness: 400, damping: 22 }}
+              >
+                {cyclesCompleted > i ? '✓' : i + 1}
+              </motion.div>
             ))}
           </div>
         </div>
 
         {/* Breathing sphere */}
         <div className="relative w-60 h-60 flex items-center justify-center mb-6">
-          {/* SVG ring */}
           <svg className="absolute w-56 h-56 -rotate-90" viewBox="0 0 100 100">
             <circle cx="50" cy="50" r="45" fill="none" stroke="#f1f5f9" strokeWidth="2" />
             <circle cx="50" cy="50" r="45" fill="none"
@@ -188,16 +259,14 @@ export default function BreathingExercise({ onBack, logActivity, onComplete }: B
               strokeLinecap="round" />
           </svg>
 
-          {/* Background glow orb */}
           <div className="absolute w-48 h-48 rounded-full transition-all duration-[4000ms] ease-in-out pointer-events-none blur-xl"
-            style={{ background: cfg.bg, transform: `scale(${orbScale})` }} />
+            style={{ background: cfg.bg, transform: `scale(${cfg.scale})` }} />
 
-          {/* Core bubble - uses inline style for smooth scale animation */}
           <button onClick={() => setIsRunning(!isRunning)}
-            className="relative flex flex-col items-center justify-center text-white rounded-full shadow-2xl border-4 border-white transition-all duration-[4000ms] ease-in-out cursor-pointer"
+            className="relative flex flex-col items-center justify-center text-white rounded-full shadow-2xl border-4 border-white transition-all duration-[4000ms] ease-in-out"
             style={{
               width: '144px', height: '144px',
-              transform: `scale(${orbScale})`,
+              transform: `scale(${cfg.scale})`,
               background: `radial-gradient(circle at 35% 35%, ${cfg.color}cc, ${cfg.color})`,
               boxShadow: `0 8px 32px ${cfg.color}60`,
             }}>
@@ -210,12 +279,21 @@ export default function BreathingExercise({ onBack, logActivity, onComplete }: B
         </div>
 
         {/* Phase label */}
-        <div className="text-center mb-6">
-          <h4 className="text-2xl font-black tracking-widest mb-1 transition-all duration-500" style={{ color: cfg.color }}>
-            {cfg.title}
-          </h4>
-          <p className="text-xs text-gray-500 font-semibold">{cfg.subtitle}</p>
-        </div>
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={phase}
+            className="text-center mb-6"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.2 }}
+          >
+            <h4 className="text-2xl font-black tracking-widest mb-1" style={{ color: cfg.color }}>
+              {cfg.title}
+            </h4>
+            <p className="text-xs text-gray-500 font-semibold">{cfg.subtitle}</p>
+          </motion.div>
+        </AnimatePresence>
 
         {/* Step indicators */}
         <div className="w-full max-w-xs flex gap-2">
