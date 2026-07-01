@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Eye, Hand, Ear, Wind, CheckCircle2, ArrowLeft, ArrowRight, ShieldCheck, HeartPulse } from 'lucide-react';
+import { Eye, Hand, Ear, Wind, HeartPulse, ArrowLeft, Check, ChevronRight } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface GroundingExerciseProps {
   onBack: () => void;
@@ -7,319 +8,314 @@ interface GroundingExerciseProps {
   onComplete?: () => void;
 }
 
-interface GroundingStep {
-  number: number;
-  sensory: string;
-  title: string;
-  desc: string;
-  placeholder: string;
-  icon: React.ReactNode;
-  bgHex: string;
-  borderHex: string;
-  iconBgHex: string;
-  iconTextHex: string;
-  suggestions: string[];
-}
+const steps = [
+  {
+    count: 5,
+    sense: 'Ver',
+    emoji: '👁️',
+    icon: Eye,
+    color: '#3b82f6',
+    bg: '#eff6ff',
+    instruction: '5 cosas que puedes VER',
+    hint: 'Mirá a tu alrededor. Nombrá 5 objetos.',
+    suggestions: ['La pared', 'Mis manos', 'Una ventana', 'Mis zapatos', 'Una sombra', 'Una planta', 'Mi ropa'],
+  },
+  {
+    count: 4,
+    sense: 'Sentir',
+    emoji: '✋',
+    icon: Hand,
+    color: '#10b981',
+    bg: '#ecfdf5',
+    instruction: '4 cosas que puedes SENTIR',
+    hint: 'Prestá atención a tu cuerpo. ¿Qué tocás?',
+    suggestions: ['El piso bajo mis pies', 'Mi ropa', 'El respaldo', 'El aire en mis brazos', 'Mis manos', 'El asiento'],
+  },
+  {
+    count: 3,
+    sense: 'Escuchar',
+    emoji: '👂',
+    icon: Ear,
+    color: '#6366f1',
+    bg: '#eef2ff',
+    instruction: '3 cosas que puedes ESCUCHAR',
+    hint: 'Cerrá los ojos un segundo. ¿Qué sonidos hay?',
+    suggestions: ['Silencio', 'El viento', 'Un motor', 'Voces', 'Pasos', 'Mi respiración', 'Un pájaro'],
+  },
+  {
+    count: 2,
+    sense: 'Oler',
+    emoji: '👃',
+    icon: Wind,
+    color: '#f59e0b',
+    bg: '#fffbeb',
+    instruction: '2 cosas que puedes OLER',
+    hint: 'Respirá profundo por la nariz.',
+    suggestions: ['Aire fresco', 'Mi ropa', 'Perfume', 'Comida', 'La habitación', 'Nada en particular'],
+  },
+  {
+    count: 1,
+    sense: 'Saborear',
+    emoji: '👅',
+    icon: HeartPulse,
+    color: '#ec4899',
+    bg: '#fdf2f8',
+    instruction: '1 cosa que puedes SABOREAR',
+    hint: 'Prestá atención a tu boca.',
+    suggestions: ['Agua fresca', 'Sabor neutro', 'Chicle', 'Café', 'Fruta', 'Nada en particular'],
+  },
+];
 
 export default function GroundingExercise({ onBack, logActivity, onComplete }: GroundingExerciseProps) {
   const [currentStep, setCurrentStep] = useState(0);
-  const [inputs, setInputs] = useState<string[][]>([[], [], [], [], []]);
-  const [currentInputValue, setCurrentInputValue] = useState('');
-  const [isFinished, setIsFinished] = useState(false);
+  const [selected, setSelected] = useState<string[][]>(steps.map(() => []));
+  const [customInput, setCustomInput] = useState('');
+  const [showInput, setShowInput] = useState(false);
+  const [done, setDone] = useState(false);
+  const [direction, setDirection] = useState(1);
 
-  const steps: GroundingStep[] = [
-    {
-      number: 5,
-      sensory: 'VISÃO',
-      title: '5 Coisas que você pode VER',
-      desc: 'Observe atentamente seu entorno. Busque 5 objetos pequenos ou grandes, cores ou detalhes e escreva ou apenas pense neles.',
-      placeholder: 'Ex: O brilho do sol, uma planta, minha xícara...',
-      icon: <Eye className="w-8 h-8" />,
-      bgHex: 'bg-blue-50',
-      borderHex: 'border-blue-100',
-      iconBgHex: 'bg-blue-100',
-      iconTextHex: 'text-blue-600',
-      suggestions: ['A textura da parede', 'Uma sombra no chão', 'Seus próprios sapatos', 'Uma caneta ou lápis', 'Um livro por perto']
-    },
-    {
-      number: 4,
-      sensory: 'TATO',
-      title: '4 Coisas que você pode SENTIR',
-      desc: 'Preste atenção ao seu corpo físico. Sinta texturas, pressões ou temperaturas e nomeie-as para se ancorar no presente.',
-      placeholder: 'Ex: O toque da minha roupa, o teclado frio...',
-      icon: <Hand className="w-8 h-8" />,
-      bgHex: 'bg-emerald-50',
-      borderHex: 'border-[#B2F5EA]/40',
-      iconBgHex: 'bg-emerald-100',
-      iconTextHex: 'text-emerald-600',
-      suggestions: ['Seus pés tocando o chão firme', 'O vento fresco nos braços', 'A maciez da calça', 'O encosto da sua cadeira']
-    },
-    {
-      number: 3,
-      sensory: 'AUDIÇÃO',
-      title: '3 Coisas que você pode OUVIR',
-      desc: 'Feche os olhos por um segundo. Ouça com atenção e separe o barulho ambiente em 3 sons individuais.',
-      placeholder: 'Ex: O cantar de um pássaro, um carro distante...',
-      icon: <Ear className="w-8 h-8" />,
-      bgHex: 'bg-indigo-50',
-      borderHex: 'border-indigo-100',
-      iconBgHex: 'bg-indigo-100',
-      iconTextHex: 'text-indigo-600',
-      suggestions: ['O zumbido do ar-condicionado', 'Os passos distantes de alguém', 'Sua própria batida cardíaca ou respiração']
-    },
-    {
-      number: 2,
-      sensory: 'OLFATO',
-      title: '2 Coisas que você pode CHEIRAR',
-      desc: 'Inhale profundamente pelo nariz. O que você nota? Tente distinguir pelo menos 2 aromas ou cheiros sutis no ambiente.',
-      placeholder: 'Ex: Aroma de café, cheirinho de chuva...',
-      icon: <Wind className="w-8 h-8" />,
-      bgHex: 'bg-amber-50',
-      borderHex: 'border-amber-150',
-      iconBgHex: 'bg-amber-100',
-      iconTextHex: 'text-amber-600',
-      suggestions: ['O perfume da sua roupa', 'Cheirinho de casa ou madeira', 'Limpeza ou ar fresco']
-    },
-    {
-      number: 1,
-      sensory: 'PALADAR',
-      title: '1 Coisa que você pode SABOREAR',
-      desc: 'Conecte-se com sua boca. Saboreie a sensação atual ou dê um pequeno gole de água fresca, prestando atenção no sabor.',
-      placeholder: 'Ex: O frescor da hortelã, sabor neutro...',
-      icon: <HeartPulse className="w-8 h-8" />,
-      bgHex: 'bg-rose-50',
-      borderHex: 'border-rose-100',
-      iconBgHex: 'bg-rose-100',
-      iconTextHex: 'text-rose-600',
-      suggestions: ['A saliva fresca no paladar', 'Sabor residual de comida ou café', 'Um gole lento de água fresca']
-    }
-  ];
+  const step = steps[currentStep];
+  const stepSelected = selected[currentStep];
+  const remaining = step.count - stepSelected.length;
+  const isStepComplete = stepSelected.length >= step.count;
 
-  const currentStepData = steps[currentStep];
-  const stepItems = inputs[currentStep];
-
-  const handleAddValue = (val: string) => {
-    if (!val.trim()) return;
-    if (stepItems.length >= currentStepData.number) return;
-
-    setInputs(prev => {
-      const copy = [...prev];
-      copy[currentStep] = [...copy[currentStep], val.trim()];
-      return copy;
-    });
-    setCurrentInputValue('');
-  };
-
-  const handleRemoveValue = (index: number) => {
-    setInputs(prev => {
-      const copy = [...prev];
-      copy[currentStep] = copy[currentStep].filter((_, i) => i !== index);
+  const toggle = (item: string) => {
+    setSelected(prev => {
+      const copy = prev.map(a => [...a]);
+      const idx = copy[currentStep].indexOf(item);
+      if (idx >= 0) {
+        copy[currentStep].splice(idx, 1);
+      } else if (copy[currentStep].length < step.count) {
+        copy[currentStep].push(item);
+      }
       return copy;
     });
   };
 
-  const handleNextStep = () => {
+  const addCustom = () => {
+    const val = customInput.trim();
+    if (!val || stepSelected.length >= step.count) return;
+    setSelected(prev => {
+      const copy = prev.map(a => [...a]);
+      if (!copy[currentStep].includes(val)) copy[currentStep].push(val);
+      return copy;
+    });
+    setCustomInput('');
+    setShowInput(false);
+  };
+
+  const next = () => {
     if (currentStep < steps.length - 1) {
-      setCurrentStep(prev => prev + 1);
-      setCurrentInputValue('');
+      setDirection(1);
+      setCurrentStep(s => s + 1);
+      setShowInput(false);
     } else {
-      setIsFinished(true);
+      setDone(true);
       logActivity('Conexão Sensorial 5-4-3-2-1');
     }
   };
 
-  const handleSkipStep = () => {
-    // Si el usuario no quiere introducir datos por teclado,
-    // llenamos ficticiamente el paso para que progrese de forma libre
-    setInputs(prev => {
-      const copy = [...prev];
-      if (copy[currentStep].length === 0) {
-        copy[currentStep] = Array.from({ length: currentStepData.number }, (_, i) => `Item #${i + 1}`);
-      }
+  const skip = () => {
+    setSelected(prev => {
+      const copy = prev.map(a => [...a]);
+      if (copy[currentStep].length === 0) copy[currentStep] = ['✓'];
       return copy;
     });
-    handleNextStep();
+    if (currentStep < steps.length - 1) {
+      setDirection(1);
+      setCurrentStep(s => s + 1);
+      setShowInput(false);
+    } else {
+      setDone(true);
+      logActivity('Conexão Sensorial 5-4-3-2-1');
+    }
   };
 
-  if (isFinished) {
+  if (done) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[65vh] text-center p-6 animate-in zoom-in duration-300">
-        <div className="w-24 h-24 bg-purple-100 text-[#b388c4] rounded-full flex items-center justify-center mb-6">
-          <ShieldCheck className="w-12 h-12" />
-        </div>
-        <h2 className="text-2xl font-bold mb-4">Totalmente Ancorado</h2>
-        <p className="text-gray-600 mb-8 text-sm leading-relaxed">
-          Parabéns! Você concluiu o protocolo completo 5-4-3-2-1. Sintonizar seus 5 sentidos acalma diretamente os circuitos da amígdala cerebral, trazendo você de volta para o aqui e o agora.
+      <motion.div
+        className="flex flex-col items-center justify-center min-h-[65vh] text-center p-6"
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ type: 'spring', stiffness: 280, damping: 24 }}
+      >
+        <div className="text-6xl mb-6">🛡️</div>
+        <h2 className="text-2xl font-black text-[#1e293b] mb-2">Ancorado no presente</h2>
+        <p className="text-sm text-gray-500 mb-8 max-w-xs leading-relaxed">
+          Tus 5 sentidos te trajeron de vuelta. La amígdala se calmó. Estás aquí y estás bien.
         </p>
-        {onComplete ? (
-          <div className="w-full space-y-3">
-            <button 
+        <div className="w-full space-y-3">
+          {onComplete && (
+            <motion.button
               onClick={onComplete}
-              className="w-full py-4 bg-[#b388c4] text-white rounded-xl font-bold hover:bg-[#a174b2] transition-colors shadow-md flex justify-center items-center gap-2"
+              whileTap={{ scale: 0.97 }}
+              className="w-full py-4 text-white rounded-2xl font-bold shadow-lg flex items-center justify-center gap-2"
+              style={{ background: 'linear-gradient(135deg, #b388c4, #9d6eb5)' }}
             >
-              Progresso SOS: Abraço de Borboleta 🦋
-            </button>
-            <button 
-              onClick={onBack}
-              className="w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-500 rounded-xl font-bold transition-all text-sm"
-            >
-              Voltar ao Resgate
-            </button>
-          </div>
-        ) : (
-          <button 
-            onClick={onBack}
-            className="w-full py-4 bg-[#1e293b] text-white rounded-xl font-bold hover:bg-black transition-colors shadow-md"
-          >
-            Voltar ao Resgate
+              Siguiente: Abrazo de Mariposa 🦋 <ChevronRight className="w-5 h-5" />
+            </motion.button>
+          )}
+          <button onClick={onBack}
+            className="w-full py-4 bg-[#1e293b] text-white rounded-2xl font-bold">
+            Volver al Panel
           </button>
-        )}
-      </div>
+        </div>
+      </motion.div>
     );
   }
 
   return (
-    <div className="animate-in fade-in h-full flex flex-col justify-between pb-8">
-      {/* Header with back */}
-      <div className="flex items-center justify-between mb-4">
-        <button 
-          onClick={onBack}
-          className="p-2.5 bg-white rounded-full shadow-sm border border-gray-100 hover:bg-gray-50 flex items-center justify-center text-gray-500"
-        >
-          <ArrowLeft className="w-5 h-5" />
+    <div className="flex flex-col h-full pb-8">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <button onClick={onBack} className="p-2.5 bg-white rounded-full shadow-sm border border-gray-100">
+          <ArrowLeft className="w-5 h-5 text-gray-500" />
         </button>
-        <span className="font-bold text-sm text-gray-700">Técnica 5-4-3-2-1</span>
-        <div className="w-10"></div> {/* Spacer for balance */}
+        <span className="text-sm font-bold text-gray-500">5-4-3-2-1</span>
+        <div className="w-10" />
       </div>
 
-      {/* Main card */}
-      <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 flex-1 flex flex-col justify-between">
-        
-        <div>
-          {/* Progress bar */}
-          <div className="flex items-center justify-between mb-6">
-            <span className="text-xs font-bold text-gray-400">PASSO {currentStep + 1} DE 5</span>
-            <div className="flex gap-1">
-              {steps.map((_, i) => (
-                <div 
-                  key={i} 
-                  className={`w-12 h-1.5 rounded-full transition-all duration-300 ${
-                    i === currentStep 
-                      ? 'bg-[#b388c4]' 
-                      : i < currentStep 
-                        ? 'bg-[#EAE0F1]' 
-                        : 'bg-gray-100'
-                  }`} 
-                />
-              ))}
-            </div>
+      {/* Step dots */}
+      <div className="flex gap-2 justify-center mb-8">
+        {steps.map((s, i) => (
+          <motion.div
+            key={i}
+            className="h-2 rounded-full"
+            animate={{
+              width: i === currentStep ? 28 : 8,
+              background: i < currentStep ? '#10b981' : i === currentStep ? step.color : '#e5e7eb',
+            }}
+            transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+          />
+        ))}
+      </div>
+
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={currentStep}
+          initial={{ opacity: 0, x: 40 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -40 }}
+          transition={{ type: 'spring', stiffness: 340, damping: 30 }}
+          className="flex flex-col flex-1"
+        >
+          {/* Icon + instruction */}
+          <div className="text-center mb-8">
+            <motion.div
+              className="text-5xl mb-4 inline-block"
+              initial={{ scale: 0.6, rotate: -10 }}
+              animate={{ scale: 1, rotate: 0 }}
+              transition={{ type: 'spring', stiffness: 320, damping: 20, delay: 0.05 }}
+            >
+              {step.emoji}
+            </motion.div>
+            <h2 className="text-xl font-black text-[#1e293b] mb-1">{step.instruction}</h2>
+            <p className="text-sm text-gray-400">{step.hint}</p>
           </div>
 
-          {/* Sensory Heading Card */}
-          <div className={`p-5 rounded-2xl border ${currentStepData.bgHex} ${currentStepData.borderHex} flex gap-4 items-center mb-6`}>
-            <div className={`p-3 rounded-xl ${currentStepData.iconBgHex} ${currentStepData.iconTextHex} shadow-inner`}>
-              {currentStepData.icon}
-            </div>
-            <div>
-              <span className={`text-[10px] font-black tracking-widest ${currentStepData.iconTextHex} uppercase`}>
-                Canal Sensorial: {currentStepData.sensory}
-              </span>
-              <h3 className="text-lg font-black text-[#1e293b] leading-tight">
-                {currentStepData.title}
-              </h3>
-            </div>
-          </div>
-
-          {/* Description */}
-          <p className="text-sm text-gray-600 mb-6 leading-relaxed">
-            {currentStepData.desc}
-          </p>
-
-          {/* Predefined helpful suggestions */}
-          <div className="mb-6">
-            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-2">Sugestões reconfortantes:</span>
-            <div className="flex flex-wrap gap-2">
-              {currentStepData.suggestions.map((sug, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => handleAddValue(sug)}
-                  disabled={stepItems.length >= currentStepData.number}
-                  className="bg-gray-50 border border-gray-200 hover:bg-gray-100 disabled:opacity-50 text-[11px] text-gray-600 font-medium px-2.5 py-1.5 rounded-lg text-left leading-tight"
-                >
-                  + {sug}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Items input */}
-          {stepItems.length < currentStepData.number && (
-            <div className="flex gap-2 mb-6">
-              <input 
-                type="text" 
-                placeholder={currentStepData.placeholder}
-                value={currentInputValue}
-                onChange={(e) => setCurrentInputValue(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    handleAddValue(currentInputValue);
-                  }
-                }}
-                className="flex-1 bg-gray-50 border border-gray-200 focus:border-[#b388c4] focus:ring-1 focus:ring-[#b388c4] focus:outline-none rounded-xl px-4 py-3 text-sm"
-              />
-              <button 
-                onClick={() => handleAddValue(currentInputValue)}
-                className="bg-[#1e293b] hover:bg-black text-white text-xs font-bold px-4 rounded-xl shadow-sm transition-colors"
+          {/* Counter */}
+          <div className="flex justify-center gap-2 mb-6">
+            {Array.from({ length: step.count }).map((_, i) => (
+              <motion.div
+                key={i}
+                className="w-8 h-8 rounded-full flex items-center justify-center border-2 text-xs font-black"
+                animate={
+                  i < stepSelected.length
+                    ? { background: step.color, borderColor: step.color, color: '#fff', scale: 1 }
+                    : { background: '#f8fafc', borderColor: '#e5e7eb', color: '#cbd5e1', scale: 1 }
+                }
+                transition={{ type: 'spring', stiffness: 400, damping: 22 }}
               >
-                Adicionar
-              </button>
-            </div>
-          )}
+                {i < stepSelected.length ? <Check className="w-3.5 h-3.5" /> : i + 1}
+              </motion.div>
+            ))}
+          </div>
 
-          {/* Items registered */}
-          {stepItems.length > 0 && (
-            <div className="space-y-2 mb-6">
-              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Sua lista ({stepItems.length} de {currentStepData.number}):</span>
-              <div className="grid grid-cols-1 gap-2">
-                {stepItems.map((val, idx) => (
-                  <div key={idx} className="flex justify-between items-center text-xs bg-gray-50 p-3 rounded-xl border border-gray-100 animate-in slide-in-from-bottom-2 duration-200">
-                    <span className="font-medium text-[#1e293b]">✔ {val}</span>
-                    {/* Permitir remover solo si no Skip */}
-                    {val !== `Item #${idx + 1}` && (
-                      <button 
-                        onClick={() => handleRemoveValue(idx)} 
-                        className="text-gray-400 hover:text-rose-500 font-bold px-1"
-                      >
-                        ×
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-        </div>
-
-        {/* Action Controls */}
-        <div className="space-y-2 mt-4">
-          {stepItems.length >= currentStepData.number ? (
-            <button 
-              onClick={handleNextStep}
-              className="w-full py-4 bg-[#b388c4] text-white rounded-xl font-bold shadow-md hover:bg-[#9d73ad] transition-all flex items-center justify-center gap-2"
+          {/* Suggestions */}
+          <div className="flex flex-wrap gap-2 justify-center mb-4">
+            {step.suggestions.map((sug) => {
+              const isSelected = stepSelected.includes(sug);
+              const isFull = stepSelected.length >= step.count && !isSelected;
+              return (
+                <motion.button
+                  key={sug}
+                  onClick={() => toggle(sug)}
+                  disabled={isFull}
+                  whileTap={{ scale: 0.94 }}
+                  className="px-3 py-2 rounded-full text-sm font-semibold border transition-all disabled:opacity-30"
+                  animate={
+                    isSelected
+                      ? { background: step.color, borderColor: step.color, color: '#fff' }
+                      : { background: '#f8fafc', borderColor: '#e5e7eb', color: '#475569' }
+                  }
+                  transition={{ type: 'spring', stiffness: 400, damping: 24 }}
+                >
+                  {isSelected ? <span className="flex items-center gap-1"><Check className="w-3 h-3" />{sug}</span> : sug}
+                </motion.button>
+              );
+            })}
+            <button
+              onClick={() => setShowInput(s => !s)}
+              className="px-3 py-2 rounded-full text-sm font-semibold border border-dashed border-gray-300 text-gray-400"
             >
-              {currentStep < steps.length - 1 ? 'Próximo Canal' : 'Concluir Exercício'} <ArrowRight className="w-5 h-5" />
+              + Otra
             </button>
-          ) : (
-            <button 
-              onClick={handleSkipStep}
-              className="w-full py-4 bg-gray-100 hover:bg-gray-200 text-gray-500 rounded-xl font-bold transition-all"
-            >
-              Fazer mentalmente (Próximo)
-            </button>
-          )}
-        </div>
+          </div>
 
+          {/* Custom input */}
+          <AnimatePresence>
+            {showInput && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="flex gap-2 mb-4 overflow-hidden"
+              >
+                <input
+                  autoFocus
+                  type="text"
+                  value={customInput}
+                  onChange={e => setCustomInput(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && addCustom()}
+                  placeholder="Escribí lo que ves..."
+                  className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none"
+                  style={{ borderColor: customInput ? step.color : undefined }}
+                />
+                <button
+                  onClick={addCustom}
+                  className="px-4 rounded-xl text-white font-bold text-sm"
+                  style={{ background: step.color }}
+                >
+                  OK
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.div>
+      </AnimatePresence>
+
+      {/* CTA */}
+      <div className="space-y-2 mt-auto pt-4">
+        {isStepComplete ? (
+          <motion.button
+            onClick={next}
+            whileTap={{ scale: 0.97 }}
+            className="w-full py-4 text-white rounded-2xl font-bold shadow-lg flex items-center justify-center gap-2"
+            style={{ background: `linear-gradient(135deg, ${step.color}, ${step.color}cc)`, boxShadow: `0 8px 24px ${step.color}40` }}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ type: 'spring', stiffness: 380, damping: 26 }}
+          >
+            {currentStep < steps.length - 1 ? 'Siguiente sentido' : 'Terminar'} <ChevronRight className="w-5 h-5" />
+          </motion.button>
+        ) : (
+          <button
+            onClick={skip}
+            className="w-full py-4 bg-gray-100 text-gray-500 rounded-2xl font-bold text-sm"
+          >
+            Hacerlo mentalmente (Siguiente)
+          </button>
+        )}
       </div>
     </div>
   );
