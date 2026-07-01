@@ -1,4 +1,5 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { HeartPulse, AlertCircle, ShieldCheck, TrendingUp, LogOut, Users, Key, Flame, Star } from 'lucide-react';
 
 import { useLocalStorageState } from './hooks/useLocalStorageState';
@@ -10,8 +11,10 @@ import Login from './components/Login';
 import NavButton from './components/NavButton';
 import SecuritySettingsModal from './components/SecuritySettingsModal';
 import ConfettiEffect from './components/ConfettiEffect';
+import Onboarding from './components/Onboarding';
 import { Buyer, GamificationState, ALL_BADGES, getLevelInfo, getNextLevel } from './types';
 import * as db from './lib/db';
+import { requestNotificationPermission, showNotification, checkAndShowDailyReminder } from './lib/notifications';
 
 const XP_TABLE: Record<string, number> = {
   'Respiração Tática': 30,
@@ -32,6 +35,7 @@ const DEFAULT_GAMIFICATION: GamificationState = {
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('rescate');
+  const [prevTab, setPrevTab] = useState('rescate');
   const [isSecurityModalOpen, setIsSecurityModalOpen] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
   const [newBadge, setNewBadge] = useState<string | null>(null);
@@ -43,6 +47,8 @@ export default function App() {
   const [currentUserEmail, setCurrentUserEmail] = useLocalStorageState<string | null>('sos_user_email', null);
   const [rawBuyers, setRawBuyers] = useLocalStorageState<any[]>('sos_registered_buyers', []);
   const [superadminPassword, setSuperadminPassword] = useLocalStorageState<string>('sos_superadmin_password', 'Dama8081-1');
+  const [onboardingDone, setOnboardingDone] = useLocalStorageState<Record<string, boolean>>('sos_onboarding_done', {});
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   const registeredBuyers: Buyer[] = React.useMemo(() => {
     return rawBuyers.map(b => {
@@ -75,6 +81,12 @@ export default function App() {
   // ── Load user data from Supabase on login ──
   useEffect(() => {
     if (!currentUserEmail) return;
+
+    // Show onboarding for new users
+    if (!onboardingDone[currentUserEmail]) {
+      setShowOnboarding(true);
+    }
+
     Promise.all([
       db.fetchUserLogs(currentUserEmail),
       db.fetchUserMoods(currentUserEmail),
@@ -100,6 +112,15 @@ export default function App() {
     }).catch(() => {});
   }, [currentUserEmail]);
 
+  // ── Daily reminder notification ──
+  useEffect(() => {
+    if (!currentUserEmail) return;
+    const timer = setTimeout(() => {
+      checkAndShowDailyReminder(logs);
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [currentUserEmail, logs]);
+
   const getTodayDate = () => new Date().toISOString().split('T')[0];
 
   const triggerConfetti = () => {
@@ -107,14 +128,19 @@ export default function App() {
     setTimeout(() => setShowConfetti(false), 2500);
   };
 
-  const unlockBadge = useCallback((badgeId: string) => {
-    setGamification(prev => {
-      if (prev.unlockedBadgeIds.includes(badgeId)) return prev;
-      setNewBadge(badgeId);
-      setTimeout(() => setNewBadge(null), 3500);
-      return { ...prev, unlockedBadgeIds: [...prev.unlockedBadgeIds, badgeId] };
-    });
-  }, []);
+  const handleOnboardingComplete = async () => {
+    if (currentUserEmail) {
+      setOnboardingDone(prev => ({ ...prev, [currentUserEmail]: true }));
+    }
+    setShowOnboarding(false);
+    // Request notification permission after onboarding
+    const granted = await requestNotificationPermission();
+    if (granted) {
+      setTimeout(() => {
+        showNotification('S.O.S Ansiedade 💜', 'Notificações ativadas! Te avisaremos para praticar diariamente.');
+      }, 1000);
+    }
+  };
 
   const checkBadges = useCallback((activityName: string, updatedGamification: GamificationState, allLogs: Record<string, string[]>) => {
     const toUnlock: string[] = [];
@@ -185,7 +211,6 @@ export default function App() {
 
       setTimeout(() => checkBadges(activityName, updated, newLogs), 100);
 
-      // Sync to Supabase
       if (currentUserEmail) {
         db.upsertGamification(currentUserEmail, updated).catch(() => {});
         db.insertActivityLog(currentUserEmail, activityName, today).catch(() => {});
@@ -245,6 +270,11 @@ export default function App() {
 
   const handleLogout = () => { setCurrentUserEmail(null); setActiveTab('rescate'); };
 
+  const handleTabChange = (tab: string) => {
+    setPrevTab(activeTab);
+    setActiveTab(tab);
+  };
+
   if (!currentUserEmail) {
     return (
       <Login
@@ -262,6 +292,10 @@ export default function App() {
     );
   }
 
+  if (showOnboarding) {
+    return <Onboarding onComplete={handleOnboardingComplete} />;
+  }
+
   const isSuperadmin = currentUserEmail.trim().toLowerCase() === 'maxiakiki@hotmail.com';
   const currentUserName = isSuperadmin
     ? 'Superadmin'
@@ -274,6 +308,9 @@ export default function App() {
   const xpProgress = nextLevel ? ((gamification.xp - xpForCurrentLevel) / (xpForNextLevel - xpForCurrentLevel)) * 100 : 100;
 
   const notifiedBadge = newBadge ? ALL_BADGES.find(b => b.id === newBadge) : null;
+
+  const tabOrder = ['rescate', 'prevencion', 'progreso', 'admin'];
+  const tabDirection = tabOrder.indexOf(activeTab) > tabOrder.indexOf(prevTab) ? 1 : -1;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#FDFBF7] via-[#F9F4FE] to-[#F0EEF8] text-[#1e293b] font-sans pb-24 selection:bg-[#b388c4] selection:text-white">
@@ -292,18 +329,27 @@ export default function App() {
 
       <ConfettiEffect active={showConfetti} />
 
-      {notifiedBadge && (
-        <div className="fixed bottom-28 left-1/2 -translate-x-1/2 z-50 badge-notify">
-          <div className="bg-gradient-to-r from-[#1e293b] to-[#334155] text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 border border-white/10 min-w-[260px]">
-            <span className="text-3xl">{notifiedBadge.emoji}</span>
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-[#b388c4]">Conquista Desbloqueada!</p>
-              <p className="font-black text-sm">{notifiedBadge.name}</p>
-              <p className="text-[10px] text-gray-400 leading-tight">{notifiedBadge.description}</p>
+      <AnimatePresence>
+        {notifiedBadge && (
+          <motion.div
+            key={notifiedBadge.id}
+            initial={{ y: 80, opacity: 0, scale: 0.8 }}
+            animate={{ y: 0, opacity: 1, scale: 1 }}
+            exit={{ y: -20, opacity: 0, scale: 0.9 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+            className="fixed bottom-28 left-1/2 -translate-x-1/2 z-50"
+          >
+            <div className="bg-gradient-to-r from-[#1e293b] to-[#334155] text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 border border-white/10 min-w-[260px]">
+              <span className="text-3xl">{notifiedBadge.emoji}</span>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-[#b388c4]">Conquista Desbloqueada!</p>
+                <p className="font-black text-sm">{notifiedBadge.name}</p>
+                <p className="text-[10px] text-gray-400 leading-tight">{notifiedBadge.description}</p>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <header className="bg-white/80 backdrop-blur-md p-4 shadow-sm sticky top-0 z-40 border-b border-[#EAE0F1]/80">
         <div className="max-w-md mx-auto">
@@ -324,10 +370,14 @@ export default function App() {
 
             <div className="flex items-center gap-2">
               {gamification.streak > 0 && (
-                <div className="flex items-center gap-1 bg-orange-50 border border-orange-200/60 px-2.5 py-1 rounded-full">
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  className="flex items-center gap-1 bg-orange-50 border border-orange-200/60 px-2.5 py-1 rounded-full"
+                >
                   <Flame className="w-3.5 h-3.5 text-orange-500" />
                   <span className="text-[11px] font-black text-orange-600">{gamification.streak}</span>
-                </div>
+                </motion.div>
               )}
               <div className="flex items-center gap-1 bg-[#F5EFFF] border border-[#b388c4]/20 px-2.5 py-1 rounded-full">
                 <Star className="w-3.5 h-3.5 text-[#b388c4]" />
@@ -365,34 +415,45 @@ export default function App() {
         </div>
       </header>
 
-      <main className="max-w-md mx-auto p-4">
-        {activeTab === 'rescate' && <TabRescate logActivity={logActivity} />}
-        {activeTab === 'prevencion' && (
-          <TabPrevencion logActivity={logActivity} logMood={logMood} currentMood={moods[getTodayDate()]} />
-        )}
-        {activeTab === 'progreso' && (
-          <TabProgreso logs={logs} moods={moods} gamification={gamification} />
-        )}
-        {activeTab === 'admin' && isSuperadmin && (
-          <TabAdmin
-            registeredBuyers={registeredBuyers}
-            onAddBuyer={handleAddBuyer}
-            onRemoveBuyer={handleRemoveBuyer}
-            superadminEmail="maxiakiki@hotmail.com"
-            superadminPassword={superadminPassword}
-            onChangeSuperadminPassword={setSuperadminPassword}
-            onImportBuyers={handleImportBuyers}
-          />
-        )}
+      <main className="max-w-md mx-auto p-4 overflow-hidden">
+        <AnimatePresence mode="wait" custom={tabDirection}>
+          <motion.div
+            key={activeTab}
+            custom={tabDirection}
+            initial={{ opacity: 0, x: tabDirection * 30 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: tabDirection * -30 }}
+            transition={{ duration: 0.22, ease: 'easeInOut' }}
+          >
+            {activeTab === 'rescate' && <TabRescate logActivity={logActivity} />}
+            {activeTab === 'prevencion' && (
+              <TabPrevencion logActivity={logActivity} logMood={logMood} currentMood={moods[getTodayDate()]} />
+            )}
+            {activeTab === 'progreso' && (
+              <TabProgreso logs={logs} moods={moods} gamification={gamification} />
+            )}
+            {activeTab === 'admin' && isSuperadmin && (
+              <TabAdmin
+                registeredBuyers={registeredBuyers}
+                onAddBuyer={handleAddBuyer}
+                onRemoveBuyer={handleRemoveBuyer}
+                superadminEmail="maxiakiki@hotmail.com"
+                superadminPassword={superadminPassword}
+                onChangeSuperadminPassword={setSuperadminPassword}
+                onImportBuyers={handleImportBuyers}
+              />
+            )}
+          </motion.div>
+        </AnimatePresence>
       </main>
 
       <nav className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-gray-100/80 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] z-40">
         <div className="max-w-md mx-auto flex justify-around">
-          <NavButton icon={<AlertCircle className="w-5 h-5" />} label="Resgate" isActive={activeTab === 'rescate'} onClick={() => setActiveTab('rescate')} />
-          <NavButton icon={<ShieldCheck className="w-5 h-5" />} label="Prevenção" isActive={activeTab === 'prevencion'} onClick={() => setActiveTab('prevencion')} />
-          <NavButton icon={<TrendingUp className="w-5 h-5" />} label="Progresso" isActive={activeTab === 'progreso'} onClick={() => setActiveTab('progreso')} />
+          <NavButton icon={<AlertCircle className="w-5 h-5" />} label="Resgate" isActive={activeTab === 'rescate'} onClick={() => handleTabChange('rescate')} />
+          <NavButton icon={<ShieldCheck className="w-5 h-5" />} label="Prevenção" isActive={activeTab === 'prevencion'} onClick={() => handleTabChange('prevencion')} />
+          <NavButton icon={<TrendingUp className="w-5 h-5" />} label="Progresso" isActive={activeTab === 'progreso'} onClick={() => handleTabChange('progreso')} />
           {isSuperadmin && (
-            <NavButton icon={<Users className="w-5 h-5" />} label="Admin" isActive={activeTab === 'admin'} onClick={() => setActiveTab('admin')} />
+            <NavButton icon={<Users className="w-5 h-5" />} label="Admin" isActive={activeTab === 'admin'} onClick={() => handleTabChange('admin')} />
           )}
         </div>
       </nav>
