@@ -1,118 +1,323 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  Hand as HandIcon, 
+  RefreshCcw, 
+  Activity, 
+  Zap, 
+  MousePointer2, 
+  Target,
+  Play,
+  CheckCircle2,
+  Info
+} from 'lucide-react';
+import HeaderBack from './HeaderBack';
+import TappingPointSVG from './TappingPointSVG';
 
-interface TappingPointSVGProps {
-  pointId: number;
-  techniqueId: string;
-  active: boolean;
+interface TappingProps {
+  onBack: () => void;
+  logActivity: (activity: string) => void;
 }
 
-export default function TappingPointSVG({ pointId, techniqueId, active }: TappingPointSVGProps) {
-  let animStyle: React.CSSProperties = {};
-  if (active) {
-    if (techniqueId === 'circular') animStyle = { animation: 'anim-circular 2s linear infinite' };
-    if (techniqueId === 'vertical') animStyle = { animation: 'anim-vertical 1.5s ease-in-out infinite' };
-    if (techniqueId === 'horizontal') animStyle = { animation: 'anim-horizontal 1.5s ease-in-out infinite' };
-    if (techniqueId === 'pulsating') animStyle = { animation: 'anim-pulsating 3s ease-in-out infinite' };
-    if (techniqueId === 'tapping') animStyle = { animation: 'anim-tapping 0.4s ease-in-out infinite' };
-    if (techniqueId === 'friction') animStyle = { animation: 'anim-friction 0.5s ease-in-out infinite' };
+interface PointData {
+  id: number;
+  name: string;
+  pos: string;
+  locationText: string;
+  techniques: { id: string; name: string; icon: React.ReactNode; desc: string }[];
+  tips: string;
+  duration: number;
+}
+
+export default function TappingExercise({ onBack, logActivity }: TappingProps) {
+  // Datos clínicos de los 7 puntos acupresión
+  const points: PointData[] = [
+    { 
+      id: 1, name: 'Entre as sobrancelhas (Yintang)', pos: 'Rostro', 
+      locationText: 'Bem no centro entre as sobrancelhas, no ponto inicial de ambas.',
+      techniques: [
+        { id: 'static', name: 'Pressão Estática', icon: <HandIcon className="w-3.5 h-3.5"/>, desc: 'Aplique a ponta do dedo indicador ou médio com pressão moderada, mantendo sem mover.' },
+        { id: 'circular', name: 'Massagem Circular', icon: <RefreshCcw className="w-3.5 h-3.5"/>, desc: 'Faça círculos lentos e contínuos mantendo o dedo em contato.' }
+      ],
+      tips: 'Excelente para aliviar o fluxo de pensamentos rápidos e a agitação mental.',
+      duration: 30,
+    },
+    { 
+      id: 2, name: 'Debaixo do nariz (Renzhong)', pos: 'Rostro', 
+      locationText: 'No centro do sulco nasolabial, um terço abaixo da base nasal.',
+      techniques: [
+        { id: 'static', name: 'Pressão Direta', icon: <HandIcon className="w-3.5 h-3.5"/>, desc: 'Exerça uma pressão constante e moderada apontando levemente em direção ao céu da boca.' },
+        { id: 'circular', name: 'Microcírculos', icon: <RefreshCcw className="w-3.5 h-3.5"/>, desc: 'Mova milimetricamente o tecido subcutâneo de forma circular.' }
+      ],
+      tips: 'Conhecido historicamente como o ponto de ressuscitação para reestabelecer a lucidez sensorial.',
+      duration: 30,
+    },
+    { 
+      id: 3, name: 'Queixo inferior (Chengjiang)', pos: 'Rostro', 
+      locationText: 'Na depressão central logo abaixo do lábio inferior.',
+      techniques: [
+        { id: 'static', name: 'Pressão Central', icon: <HandIcon className="w-3.5 h-3.5"/>, desc: 'Coloque o dedo e pressione de forma suave contra a mandíbula.' }
+      ],
+      tips: 'Ajuda a aliviar a tensão acumulada da mandíbula induzida por estresse noturno (bruxismo).',
+      duration: 20,
+    },
+    { 
+      id: 4, name: 'Parte interna do pulso (Neiguan)', pos: 'Brazo', 
+      locationText: 'Meça três dedos abaixo da dobra do pulso, bem no centro.',
+      techniques: [
+        { id: 'static', name: 'Pressão Firme', icon: <Target className="w-3.5 h-3.5"/>, desc: 'Pressione com firmeza em direção ao tendão principal, de forma constante.' },
+        { id: 'pulsating', name: 'Pressão Rítmica', icon: <Activity className="w-3.5 h-3.5"/>, desc: 'Pressione firmemente por 3 segundos, solte levemente e repita.' }
+      ],
+      tips: 'O ponto indispensável para acalmar as náuseas nervosas e batimentos cardíacos acelerados.',
+      duration: 60,
+    },
+    { 
+      id: 5, name: 'Centro da palma (Laogong)', pos: 'Mano', 
+      locationText: 'No meio da palma da mão, onde a ponta do dedo médio encosta ao fechar o punho.',
+      techniques: [
+        { id: 'circular', name: 'Pressão circular', icon: <RefreshCcw className="w-3.5 h-3.5"/>, desc: 'Massageie profundamente com movimentos concêntricos usando a mão oposta.' },
+        { id: 'friction', name: 'Calor tátil', icon: <Zap className="w-3.5 h-3.5"/>, desc: 'Pressione de forma estática esfregando suavemente para aquecer o ponto.' }
+      ],
+      tips: 'Eficaz para reduzir o calor corporal e liberar a angústia contida no peito.',
+      duration: 30,
+    },
+    { 
+      id: 6, name: 'Trapézio / Ombro (Jianjing)', pos: 'Hombro', 
+      locationText: 'No ponto médio entre a base do pescoço e a articulação do ombro.',
+      techniques: [
+        { id: 'static', name: 'Pressão em pinça', icon: <MousePointer2 className="w-3.5 h-3.5"/>, desc: 'Segure levemente o músculo em formato de pinça com os dedos indicador e polegar.' },
+        { id: 'circular', name: 'Descontração', icon: <RefreshCcw className="w-3.5 h-3.5"/>, desc: 'Massageie com pequenos círculos para aliviar o peso do estresse diário.' }
+      ],
+      tips: 'Libera os canais tensos do pescoço e alivia dores de cabeça provocadas pela rigidez muscular.',
+      duration: 30,
+    },
+    { 
+      id: 7, name: 'Abaixo do joelho lateral (Zusanli)', pos: 'Leg', 
+      locationText: 'Quatro dedos abaixo da patela (joelho), um dedo de largura para o lado externo.',
+      techniques: [
+        { id: 'static', name: 'Pressão forte', icon: <HandIcon className="w-3.5 h-3.5"/>, desc: 'Pressione firme com o polegar exercendo força contra a lateral da tíbia.' },
+        { id: 'tapping', name: 'Percussão', icon: <Activity className="w-3.5 h-3.5"/>, desc: 'Dê batidinhas suaves e rítmicas usando a mão fechada de forma relaxada.' }
+      ],
+      tips: 'Ponto restaurador mestre que ancora a energia, diminuindo o turbinhão de pensamentos.',
+      duration: 40,
+    },
+  ];
+
+  const [activePoint, setActivePoint] = useState(0);
+  const [isActive, setIsActive] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(points[0].duration);
+  const [isFinished, setIsFinished] = useState(false);
+  const [selectedTech, setSelectedTech] = useState('static');
+  
+  const currentPoint = points[activePoint];
+  const audioCtxRef = useRef<AudioContext | null>(null);
+
+  // Reproductor de Campanillas Suaves (Web Audio API) para marcar finalización acústica
+  const playTimerChime = (type: 'start' | 'end') => {
+    try {
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      const ctx = audioCtxRef.current;
+      if (ctx.state === 'suspended') ctx.resume();
+
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      const now = ctx.currentTime;
+      osc.type = 'sine'; 
+
+      if (type === 'start') {
+        osc.frequency.setValueAtTime(440, now); 
+        osc.frequency.exponentialRampToValueAtTime(554.37, now + 0.1); 
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.2, now + 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 1.2);
+        osc.start(now);
+        osc.stop(now + 1.2);
+      } else if (type === 'end') {
+        osc.frequency.setValueAtTime(554.37, now); 
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.2, now + 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.05, now + 0.4);
+        
+        const osc2 = ctx.createOscillator();
+        const gain2 = ctx.createGain();
+        osc2.connect(gain2);
+        gain2.connect(ctx.destination);
+        osc2.type = 'sine';
+        osc2.frequency.setValueAtTime(440, now + 0.3); 
+        gain2.gain.setValueAtTime(0, now + 0.3);
+        gain2.gain.linearRampToValueAtTime(0.2, now + 0.35);
+        gain2.gain.exponentialRampToValueAtTime(0.01, now + 1.5);
+        
+        osc.start(now);
+        osc.stop(now + 0.45);
+        osc2.start(now + 0.3);
+        osc2.stop(now + 1.5);
+      }
+    } catch (e) { 
+      console.warn("Audio error", e); 
+    }
+  };
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isActive && timeLeft > 0) {
+      interval = setInterval(() => {
+        setTimeLeft((prev) => {
+          if (prev <= 1) {
+             playTimerChime('end'); 
+             setIsActive(false);
+             return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [isActive, timeLeft]);
+
+  const handleStartTimer = () => {
+    playTimerChime('start'); 
+    setIsActive(true);
+  };
+
+  const nextPoint = () => {
+    if (activePoint < points.length - 1) {
+      const nextIdx = activePoint + 1;
+      setActivePoint(nextIdx);
+      setIsActive(false);
+      setTimeLeft(points[nextIdx].duration);
+      setSelectedTech('static'); 
+    } else {
+      setIsFinished(true);
+      logActivity('Acupressão (7 Pontos)');
+    }
+  };
+
+  if (isFinished) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center animate-in zoom-in duration-300 px-4">
+        <div className="w-20 h-20 bg-emerald-100 text-emerald-500 rounded-full flex items-center justify-center mb-5 border border-emerald-200 shadow-xs">
+          <CheckCircle2 className="w-10 h-10" />
+        </div>
+        <h2 className="text-xl font-bold mb-3 text-[#1e293b]">Acupressão Concluída!</h2>
+        <p className="text-gray-600 mb-8 text-xs leading-relaxed max-w-xs">
+          Você estimulou os 7 canais de acupressão. Sua energia física está balanceada e você liberou grande parte da tensão física provocada pela reação de estresse corporal.
+        </p>
+        <button 
+          onClick={onBack} 
+          className="w-full py-4 rounded-xl font-bold text-white bg-[#1e293b] hover:bg-black transition-colors"
+        >
+          Voltar à Prevenção
+        </button>
+      </div>
+    );
   }
 
-  const renderGuides = (cx: number, cy: number, rCirc: number) => (
-    <>
-      {active && techniqueId === 'circular' && (
-        <path d={`M ${cx} ${cy - rCirc} A ${rCirc} ${rCirc} 0 1 1 ${cx - 0.1} ${cy - rCirc}`} fill="none" stroke="#f43f5e" strokeWidth="1.5" strokeDasharray="3,3" opacity="0.6" />
-      )}
-      {active && techniqueId === 'vertical' && (
-        <path d={`M ${cx} ${cy - 12} L ${cx} ${cy + 12}`} fill="none" stroke="#f43f5e" strokeWidth="1.5" strokeDasharray="3,3" opacity="0.6" />
-      )}
-      {active && techniqueId === 'horizontal' && (
-        <path d={`M ${cx - 12} ${cy} L ${cx + 12} ${cy}`} fill="none" stroke="#f43f5e" strokeWidth="1.5" strokeDasharray="3,3" opacity="0.6" />
-      )}
-    </>
-  );
-
-  const renderActivePoint = (cx: number, cy: number) => (
-    <g style={animStyle}>
-       <circle cx={cx} cy={cy} r="3" fill="#f43f5e" />
-       {active && techniqueId === 'static' && (
-         <circle cx={cx} cy={cy} r="10" fill="#f43f5e" opacity="0.4" className="animate-ping" />
-       )}
-       {active && techniqueId !== 'static' && (
-         <circle cx={cx} cy={cy} r="7" fill="#f43f5e" opacity="0.3" />
-       )}
-    </g>
-  );
+  const isStepComplete = timeLeft === 0;
 
   return (
-    <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-md">
-      {(pointId === 1 || pointId === 2 || pointId === 3) && (
-        // --- ROSTRO (Puntos 1, 2, 3) ---
-        <>
-          <path d="M 25 45 Q 25 85 50 90 Q 75 85 75 45 Q 75 15 50 15 Q 25 15 25 45" fill="#f8fafc" stroke="#cbd5e1" strokeWidth="2" />
-          <path d="M 33 46 Q 38 49 43 46" fill="none" stroke="#64748b" strokeWidth="1.5" />
-          <path d="M 57 46 Q 62 49 67 46" fill="none" stroke="#64748b" strokeWidth="1.5" />
-          <path d="M 31 38 Q 37 36 44 39" fill="none" stroke="#475569" strokeWidth="2.5" strokeLinecap="round" />
-          <path d="M 69 38 Q 63 36 56 39" fill="none" stroke="#475569" strokeWidth="2.5" strokeLinecap="round" />
-          <path d="M 50 45 L 50 58 L 47 60" fill="none" stroke="#94a3b8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-          <path d="M 42 72 Q 50 74 58 72" fill="none" stroke="#94a3b8" strokeWidth="1.5" strokeLinecap="round" />
-          
-          {pointId === 1 && renderActivePoint(50, 38.5)}
-          {pointId === 1 && renderGuides(50, 38.5, 7.5)}
-          {pointId === 2 && renderActivePoint(50, 64)}
-          {pointId === 2 && renderGuides(50, 64, 4)}
-          {pointId === 3 && renderActivePoint(50, 78)}
-          {pointId === 3 && renderGuides(50, 78, 6)}
-        </>
-      )}
+    <div className="animate-in fade-in pb-8">
+      <HeaderBack onBack={onBack} title="Acupressão: 7 Pontos" />
+      
+      <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 relative overflow-hidden">
+        
+        {/* Progress header */}
+        <div className="flex justify-between items-center mb-5">
+           <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">PASSO {activePoint + 1} DE {points.length}</span>
+           <div className="flex gap-1">
+             {points.map((_, i) => (
+                <div key={i} className={`w-1.5 h-1.5 rounded-full transition-colors ${i === activePoint ? 'bg-[#b388c4]' : i < activePoint ? 'bg-[#EAE0F1]' : 'bg-gray-100'}`}></div>
+             ))}
+           </div>
+        </div>
 
-      {pointId === 4 && (
-        // --- MUÑECA/BRAZO (Punto 4) ---
-        <>
-          <path d="M 35 10 L 35 100" fill="none" stroke="#cbd5e1" strokeWidth="2" />
-          <path d="M 65 10 L 65 100" fill="none" stroke="#cbd5e1" strokeWidth="2" />
-          <path d="M 35 40 Q 50 45 65 40" fill="none" stroke="#94a3b8" strokeWidth="1.5" />
-          <path d="M 37 43 Q 50 48 63 43" fill="none" stroke="#94a3b8" strokeWidth="1" opacity="0.6"/>
-          <path d="M 46 45 L 46 100" fill="none" stroke="#cbd5e1" strokeWidth="1.5" strokeDasharray="4,4" />
-          <path d="M 54 45 L 54 100" fill="none" stroke="#cbd5e1" strokeWidth="1.5" strokeDasharray="4,4" />
-          
-          {renderActivePoint(50, 65)}
-        </>
-      )}
+        {/* CONTENIDO INTERACTIVO */}
+        <div className="flex flex-col">
+           <div className="text-center mb-4">
+             <h3 className="text-lg font-black text-[#1e293b] leading-tight">{currentPoint.name}</h3>
+             <p className="text-[10px] font-bold text-[#b388c4] bg-[#F5EFFF] inline-block px-3 py-1 rounded-full border border-[#b388c4]/20 mt-1.5 max-w-xs">
+               📍 {currentPoint.locationText}
+             </p>
+           </div>
 
-      {pointId === 5 && (
-        // --- PALMA DE LA MANO (Punto 5) ---
-        <>
-           <path d="M 35 90 L 35 60 Q 25 50 25 40 Q 25 35 30 35 Q 35 35 38 45 L 40 25 Q 40 20 45 20 Q 50 20 50 30 L 52 15 Q 52 10 57 10 Q 62 10 62 25 L 64 25 Q 64 20 69 20 Q 74 20 74 35 L 74 60 Q 70 80 65 90 Z" fill="#f8fafc" stroke="#cbd5e1" strokeWidth="2" strokeLinejoin="round" />
-           <path d="M 35 60 Q 50 55 65 65" fill="none" stroke="#94a3b8" strokeWidth="1.5" opacity="0.5" />
-           <path d="M 45 45 Q 55 60 55 80" fill="none" stroke="#94a3b8" strokeWidth="1.5" opacity="0.5" />
-           
-           {renderActivePoint(50, 52)}
-           {renderGuides(50, 52, 8)}
-        </>
-      )}
+           {/* Gráfico Corporal en Esfera */}
+           <div className="relative w-40 h-40 mx-auto mb-5 bg-emerald-50/50 rounded-full border-4 border-emerald-100/50 flex items-center justify-center shadow-inner overflow-hidden">
+              <TappingPointSVG techniqueId={selectedTech} active={isActive} pointId={currentPoint.id} />
+              <div className="absolute top-1.5 right-1.5 w-6 h-6 bg-[#f43f5e] text-white rounded-full flex items-center justify-center font-extrabold text-xs shadow-sm z-10">
+                {currentPoint.id}
+              </div>
+           </div>
 
-      {pointId === 6 && (
-        // --- HOMBRO / CUELLO (Punto 6) ---
-        <>
-           <path d="M 35 0 L 35 15 Q 35 30 20 45 L 0 45 L 0 100 L 100 100 L 100 45 L 80 45 Q 65 30 65 15 L 65 0" fill="#f8fafc" stroke="#cbd5e1" strokeWidth="2" />
-           <path d="M 50 15 L 50 45" fill="none" stroke="#94a3b8" strokeWidth="1.5" strokeDasharray="3,3" />
-           
-           {renderActivePoint(72, 40)}
-           {renderGuides(72, 40, 8)}
-        </>
-      )}
+           {/* Selección de Técnica de Masaje */}
+           <div className="mb-4">
+             <span className="text-[9px] font-black text-gray-400 uppercase tracking-wider block mb-1.5">Técnicas de Massagem:</span>
+             <div className="grid grid-cols-2 gap-2">
+               {currentPoint.techniques.map(tech => (
+                 <button 
+                   key={tech.id}
+                   onClick={() => setSelectedTech(tech.id)}
+                   className={`flex items-center justify-center gap-1.5 p-2 rounded-xl text-xs font-bold transition-all border ${
+                     selectedTech === tech.id 
+                       ? 'bg-[#1e293b] text-white border-[#1e293b] shadow-xs' 
+                       : 'bg-gray-50 text-gray-500 border-gray-150 hover:bg-gray-100'
+                   }`}
+                 >
+                   {tech.icon}
+                   <span className="text-[10px]">{tech.name}</span>
+                 </button>
+               ))}
+             </div>
+           </div>
 
-      {pointId === 7 && (
-        // --- RODILLA / PIERNA (Punto 7) ---
-        <>
-           <path d="M 30 20 L 30 40 Q 25 55 30 75 L 30 100 M 70 20 L 70 40 Q 75 55 70 75 L 65 100" fill="none" stroke="#cbd5e1" strokeWidth="2" />
-           <ellipse cx="50" cy="35" rx="12" ry="15" fill="none" stroke="#94a3b8" strokeWidth="2" />
-           <path d="M 50 50 L 50 100" fill="none" stroke="#cbd5e1" strokeWidth="1.5" opacity="0.6" />
-           
-           {renderActivePoint(63, 60)}
-           {renderGuides(63, 60, 6)}
-        </>
-      )}
-    </svg>
+           {/* Descripción del masaje */}
+           <div className="bg-gray-50 p-3.5 rounded-xl border border-gray-100 mb-4 min-h-[64px] flex items-center">
+             <p className="text-xs text-gray-600 leading-normal">
+               <strong className="text-[#1e293b] font-extrabold">Instruções:</strong>{' '}
+               {currentPoint.techniques.find(t => t.id === selectedTech)?.desc}
+             </p>
+           </div>
+
+           {/* Tip clínico para potenciar */}
+           {!isActive && timeLeft === currentPoint.duration && (
+             <div className="bg-amber-50 p-3 rounded-lg border border-amber-100 mb-5 flex gap-2 items-start animate-in zoom-in">
+               <Info className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+               <p className="text-[10px] text-amber-800 leading-normal font-medium">
+                 <strong className="font-bold">Efeito clínico:</strong> {currentPoint.tips}
+               </p>
+             </div>
+           )}
+        </div>
+
+        {/* TEMPORIZADOR */}
+        <div className="h-16 flex items-center justify-center mt-1">
+          {isStepComplete ? (
+            <button 
+              onClick={nextPoint}
+              className="w-full py-3.5 bg-[#b388c4] text-white rounded-xl font-bold shadow-sm hover:bg-[#9d73ad] transition-all animate-in zoom-in"
+            >
+              Concluído! Próximo Ponto
+            </button>
+          ) : (
+             !isActive ? (
+               <button 
+                 onClick={handleStartTimer}
+                 className="w-full py-3.5 bg-[#1e293b] text-white rounded-xl font-bold shadow-sm hover:bg-black transition-colors flex justify-center items-center gap-2"
+               >
+                 <Play className="w-4 h-4 fill-current" /> Iniciar ({currentPoint.duration} s)
+               </button>
+             ) : (
+               <div className="text-4xl font-light text-[#b388c4] tabular-nums animate-pulse flex items-center gap-1.5">
+                 {timeLeft}<span className="text-lg text-gray-400">s</span>
+               </div>
+             )
+          )}
+        </div>
+
+      </div>
+    </div>
   );
 }

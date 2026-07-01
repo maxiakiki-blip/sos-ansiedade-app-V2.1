@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="120" fill="#b388c4"/>
+  <rect width="512" height="512" rx="120" fill="url(#grad)"/>
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#c9a8d6"/>
+      <stop offset="100%" style="stop-color:#9d6eb5"/>
+    </linearGradient>
+  </defs>
+  <!-- Heart -->
+  <path d="M256 370 C256 370 140 290 140 210 C140 170 170 145 200 145 C225 145 245 158 256 175 C267 158 287 145 312 145 C342 145 372 170 372 210 C372 290 256 370 256 370Z" fill="white" opacity="0.95"/>
+  <!-- Pulse line inside heart -->
+  <polyline points="190,215 215,215 228,185 242,245 255,200 268,230 282,215 322,215" fill="none" stroke="#b388c4" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- SOS text -->
+  <text x="256" y="430" text-anchor="middle" font-family="Arial Black, sans-serif" font-weight="900" font-size="64" fill="white" opacity="0.9" letter-spacing="4">SOS</text>
+</svg>

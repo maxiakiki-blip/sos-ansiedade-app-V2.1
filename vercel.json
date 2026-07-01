@@ -1,5 +1,6 @@
 {
-  "buildCommand": "npm run build",
-  "outputDirectory": "dist",
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+  "name": "S.O.S Ansiedade",
+  "description": "Um aplicativo de resgate e prevenção para a ansiedade com guías de respiração tática, exercícios de acupressão, conexão sensorial (5-4-3-2-1), diário de emoções e sons relaxantes.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
