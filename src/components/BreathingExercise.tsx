@@ -10,66 +10,40 @@ interface BreathingExerciseProps {
 
 type BreathingPhase = 'inhale' | 'hold_full' | 'exhale' | 'hold_empty';
 
+const PHASES_ORDER: BreathingPhase[] = ['inhale', 'hold_full', 'exhale', 'hold_empty'];
+const TOTAL_CYCLES = 4;
+
 const PHASE_CONFIG: Record<BreathingPhase, {
   title: string;
   subtitle: string;
   color: string;
-  orbScale: number;
-  textScale: number;
-  textOpacity: number;
+  orbSize: number; // px, diameter of the orb
 }> = {
-  inhale: {
-    title: 'INSPIRAR',
-    subtitle: 'Suave e contínuo',
-    color: '#3b82f6',
-    orbScale: 1.35,
-    textScale: 1.18,
-    textOpacity: 1,
-  },
-  hold_full: {
-    title: 'SEGURAR',
-    subtitle: 'Pulmões cheios',
-    color: '#10b981',
-    orbScale: 1.25,
-    textScale: 1.05,
-    textOpacity: 1,
-  },
-  exhale: {
-    title: 'EXPIRAR',
-    subtitle: 'Solte pela boca',
-    color: '#b388c4',
-    orbScale: 0.85,
-    textScale: 0.88,
-    textOpacity: 0.85,
-  },
-  hold_empty: {
-    title: 'RETER',
-    subtitle: 'Vazio absoluto',
-    color: '#f59e0b',
-    orbScale: 0.72,
-    textScale: 0.78,
-    textOpacity: 0.7,
-  },
+  inhale:     { title: 'INSPIRAR', subtitle: 'Suave e contínuo',    color: '#3b82f6', orbSize: 190 },
+  hold_full:  { title: 'SEGURAR',  subtitle: 'Pulmões cheios',      color: '#10b981', orbSize: 176 },
+  exhale:     { title: 'EXPIRAR',  subtitle: 'Solte pela boca',     color: '#b388c4', orbSize: 128 },
+  hold_empty: { title: 'RETER',    subtitle: 'Vazio absoluto',      color: '#f59e0b', orbSize: 108 },
 };
 
-const PHASES_ORDER: BreathingPhase[] = ['inhale', 'hold_full', 'exhale', 'hold_empty'];
-const TOTAL_CYCLES = 4;
+const PHASE_LABELS: { key: BreathingPhase; short: string }[] = [
+  { key: 'inhale',     short: 'Inspirar' },
+  { key: 'hold_full',  short: 'Segurar'  },
+  { key: 'exhale',     short: 'Expirar'  },
+  { key: 'hold_empty', short: 'Reter'    },
+];
 
 function playCompletionSound(audioCtx: AudioContext) {
-  const notes = [523, 659, 784, 1047];
-  notes.forEach((freq, i) => {
+  [523, 659, 784, 1047].forEach((freq, i) => {
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
+    osc.connect(gain); gain.connect(audioCtx.destination);
     osc.type = 'sine';
     osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-    const start = audioCtx.currentTime + i * 0.18;
-    gain.gain.setValueAtTime(0, start);
-    gain.gain.linearRampToValueAtTime(0.18, start + 0.05);
-    gain.gain.exponentialRampToValueAtTime(0.001, start + 0.6);
-    osc.start(start);
-    osc.stop(start + 0.7);
+    const t = audioCtx.currentTime + i * 0.18;
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(0.18, t + 0.05);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
+    osc.start(t); osc.stop(t + 0.7);
   });
 }
 
@@ -96,8 +70,7 @@ export default function BreathingExercise({ onBack, logActivity, onComplete }: B
     try { oscRef.current?.stop(); } catch {}
     try { oscRef.current?.disconnect(); } catch {}
     try { gainRef.current?.disconnect(); } catch {}
-    oscRef.current = null;
-    gainRef.current = null;
+    oscRef.current = null; gainRef.current = null;
   };
 
   useEffect(() => {
@@ -124,46 +97,37 @@ export default function BreathingExercise({ onBack, logActivity, onComplete }: B
         gain.gain.linearRampToValueAtTime(0, now + 4);
       } else {
         osc.frequency.setValueAtTime(160, now);
-        gain.gain.setValueAtTime(0, now);
-        gain.gain.linearRampToValueAtTime(0.03, now + 0.5);
+        gain.gain.setValueAtTime(0.03, now);
         gain.gain.linearRampToValueAtTime(0.03, now + 3.5);
         gain.gain.linearRampToValueAtTime(0, now + 4);
       }
       osc.start(now);
-      oscRef.current = osc;
-      gainRef.current = gain;
+      oscRef.current = osc; gainRef.current = gain;
     } catch {}
     return () => { stopOscillator(); };
   }, [phase, isMuted, isRunning, done]);
 
   useEffect(() => {
     if (!isRunning || done) return;
-    const interval = setInterval(() => {
-      setSecondsLeft(prev => prev <= 1 ? 0 : prev - 1);
-    }, 1000);
-    return () => clearInterval(interval);
+    const id = setInterval(() => setSecondsLeft(p => p <= 1 ? 0 : p - 1), 1000);
+    return () => clearInterval(id);
   }, [isRunning, done]);
 
   useEffect(() => {
     if (secondsLeft !== 0) return;
-    const currentIndex = PHASES_ORDER.indexOf(phase);
-    const nextPhase = PHASES_ORDER[(currentIndex + 1) % 4];
-
+    const idx = PHASES_ORDER.indexOf(phase);
+    const next = PHASES_ORDER[(idx + 1) % 4];
     if (phase === 'hold_empty') {
-      const newCycles = cyclesCompleted + 1;
-      setCyclesCompleted(newCycles);
-      if (newCycles >= TOTAL_CYCLES) {
-        stopOscillator();
-        setDone(true);
+      const n = cyclesCompleted + 1;
+      setCyclesCompleted(n);
+      if (n >= TOTAL_CYCLES) {
+        stopOscillator(); setDone(true);
         logActivity('Respiração Tática');
-        if (!isMuted) {
-          try { playCompletionSound(getAudioCtx()); } catch {}
-        }
+        if (!isMuted) try { playCompletionSound(getAudioCtx()); } catch {}
         return;
       }
     }
-
-    setPhase(nextPhase);
+    setPhase(next);
     setSecondsLeft(4);
   }, [secondsLeft]);
 
@@ -177,8 +141,8 @@ export default function BreathingExercise({ onBack, logActivity, onComplete }: B
         animate={{ opacity: 1, scale: 1 }}
         transition={{ type: 'spring', stiffness: 280, damping: 24 }}
       >
-        <style>{`@keyframes trophy-bounce{0%,100%{transform:translateY(0) rotate(-5deg)}50%{transform:translateY(-10px) rotate(5deg)}}.trophy-anim{animation:trophy-bounce 1.5s ease-in-out infinite}`}</style>
-        <div className="w-24 h-24 rounded-full flex items-center justify-center mb-6 shadow-lg trophy-anim"
+        <style>{`@keyframes tb{0%,100%{transform:translateY(0) rotate(-5deg)}50%{transform:translateY(-10px) rotate(5deg)}}.ta{animation:tb 1.5s ease-in-out infinite}`}</style>
+        <div className="w-24 h-24 rounded-full flex items-center justify-center mb-6 shadow-lg ta"
           style={{ background: 'linear-gradient(135deg, #fbbf24, #f59e0b)' }}>
           <Trophy className="w-12 h-12 text-white" />
         </div>
@@ -224,114 +188,123 @@ export default function BreathingExercise({ onBack, logActivity, onComplete }: B
         </button>
       </div>
 
-      <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 flex-1 flex flex-col items-center py-8">
+      <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 flex-1 flex flex-col items-center py-6">
 
         {/* Cycle counter */}
-        <div className="w-full max-w-xs mb-8">
+        <div className="w-full max-w-xs mb-6">
           <div className="flex justify-between items-center mb-3">
             <span className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Ciclos</span>
             <AnimatePresence mode="wait">
-              <motion.span
-                key={cyclesCompleted}
-                initial={{ opacity: 0, y: -8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 8 }}
+              <motion.span key={cyclesCompleted}
+                initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }}
                 transition={{ type: 'spring', stiffness: 400, damping: 24 }}
-                className="text-2xl font-black tabular-nums"
-                style={{ color: cfg.color }}
-              >
+                className="text-xl font-black tabular-nums" style={{ color: cfg.color }}>
                 {cyclesCompleted}<span className="text-sm text-gray-300 font-bold"> / {TOTAL_CYCLES}</span>
               </motion.span>
             </AnimatePresence>
           </div>
           <div className="flex gap-2 justify-center">
             {Array.from({ length: TOTAL_CYCLES }).map((_, i) => (
-              <motion.div
-                key={i}
+              <motion.div key={i}
                 className="w-12 h-12 rounded-full flex items-center justify-center border-2 font-black text-sm"
                 animate={
                   cyclesCompleted > i
-                    ? { background: '#10b981', borderColor: '#10b981', color: '#fff', scale: 1 }
+                    ? { backgroundColor: '#10b981', borderColor: '#10b981', color: '#fff', scale: 1 }
                     : cyclesCompleted === i
-                    ? { background: cfg.color + '22', borderColor: cfg.color, color: cfg.color, scale: 1.1 }
-                    : { background: '#f8fafc', borderColor: '#e5e7eb', color: '#cbd5e1', scale: 1 }
+                    ? { backgroundColor: cfg.color + '22', borderColor: cfg.color, color: cfg.color, scale: 1.08 }
+                    : { backgroundColor: '#f8fafc', borderColor: '#e5e7eb', color: '#cbd5e1', scale: 1 }
                 }
-                transition={{ type: 'spring', stiffness: 400, damping: 22 }}
-              >
+                transition={{ type: 'spring', stiffness: 400, damping: 22 }}>
                 {cyclesCompleted > i ? '✓' : i + 1}
               </motion.div>
             ))}
           </div>
         </div>
 
-        {/* Breathing orb — no ring, text inside */}
-        <div className="relative flex items-center justify-center mb-8" style={{ width: 240, height: 240 }}>
-
-          {/* Soft glow behind orb */}
-          <motion.div
-            className="absolute rounded-full blur-2xl pointer-events-none"
-            animate={{
-              width: `${cfg.orbScale * 180}px`,
-              height: `${cfg.orbScale * 180}px`,
-              background: cfg.color + '28',
-            }}
-            transition={{ duration: 4, ease: 'easeInOut' }}
-          />
-
-          {/* Main orb button */}
+        {/* Orb — animates size, text always legible */}
+        <div className="flex items-center justify-center mb-6" style={{ width: 220, height: 220 }}>
           <motion.button
             onClick={() => setIsRunning(!isRunning)}
-            className="relative flex flex-col items-center justify-center text-white rounded-full shadow-2xl border-4 border-white/60"
+            className="relative flex flex-col items-center justify-center rounded-full text-white shadow-2xl border-[5px] border-white"
             animate={{
-              width: `${cfg.orbScale * 148}px`,
-              height: `${cfg.orbScale * 148}px`,
-              background: `radial-gradient(circle at 35% 35%, ${cfg.color}cc, ${cfg.color})`,
-              boxShadow: `0 12px 40px ${cfg.color}50`,
+              width: cfg.orbSize,
+              height: cfg.orbSize,
+              backgroundColor: cfg.color,
+              boxShadow: `0 12px 48px ${cfg.color}55`,
             }}
-            transition={{ duration: 4, ease: 'easeInOut' }}
+            transition={{ duration: 3.8, ease: 'easeInOut' }}
             whileTap={{ scale: 0.96 }}
           >
             {/* Inner highlight */}
             <div className="absolute inset-0 rounded-full pointer-events-none"
-              style={{ background: 'radial-gradient(circle at 35% 30%, rgba(255,255,255,0.28), transparent 60%)' }} />
+              style={{ background: 'radial-gradient(circle at 35% 28%, rgba(255,255,255,0.3), transparent 60%)' }} />
 
-            {/* Phase word — animated with meaning */}
+            {/* Phase name — fixed size, always visible */}
             <AnimatePresence mode="wait">
               <motion.span
-                key={phase + '-label'}
-                className="font-black tracking-widest leading-none relative z-10 text-white drop-shadow"
-                initial={{ opacity: 0, scale: 0.7 }}
-                animate={{ opacity: cfg.textOpacity, scale: cfg.textScale, fontSize: '13px' }}
-                exit={{ opacity: 0, scale: 0.7 }}
-                transition={{ duration: 3.5, ease: 'easeInOut' }}
+                key={phase}
+                className="relative z-10 font-black text-white leading-none text-center"
+                style={{ fontSize: 13, letterSpacing: '0.12em' }}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.25 }}
               >
                 {cfg.title}
               </motion.span>
             </AnimatePresence>
 
-            {/* Timer */}
+            {/* Timer — large, always visible */}
             <AnimatePresence mode="wait">
               <motion.span
                 key={secondsLeft}
-                className="font-black tabular-nums leading-none relative z-10 mt-1"
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0, fontSize: `${Math.max(28, cfg.orbScale * 28)}px` }}
-                exit={{ opacity: 0, y: -6 }}
-                transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+                className="relative z-10 font-black text-white tabular-nums leading-none mt-1"
+                style={{ fontSize: 44 }}
+                initial={{ opacity: 0, scale: 0.7 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.7 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 26 }}
               >
                 {secondsLeft}
               </motion.span>
             </AnimatePresence>
 
             {/* Subtitle */}
-            <motion.span
-              className="relative z-10 mt-1 font-semibold text-white/75"
-              animate={{ fontSize: `${Math.max(8, cfg.orbScale * 8)}px`, opacity: cfg.textOpacity * 0.8 }}
-              transition={{ duration: 3.5, ease: 'easeInOut' }}
-            >
-              {cfg.subtitle}
-            </motion.span>
+            <AnimatePresence mode="wait">
+              <motion.span
+                key={phase + '-sub'}
+                className="relative z-10 text-white/75 font-semibold mt-1 text-center px-2"
+                style={{ fontSize: 9 }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                {cfg.subtitle}
+              </motion.span>
+            </AnimatePresence>
           </motion.button>
+        </div>
+
+        {/* Phase steps — minimal pill row */}
+        <div className="flex gap-1.5 mb-5">
+          {PHASE_LABELS.map(({ key, short }) => (
+            <motion.div
+              key={key}
+              className="flex flex-col items-center px-3 py-2 rounded-xl border text-center"
+              animate={
+                phase === key
+                  ? { backgroundColor: PHASE_CONFIG[key].color, borderColor: PHASE_CONFIG[key].color, color: '#fff', scale: 1.05 }
+                  : PHASES_ORDER.indexOf(key) < PHASES_ORDER.indexOf(phase) || (phase === 'inhale' && cyclesCompleted > 0 && key === 'hold_empty')
+                  ? { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0', color: '#16a34a', scale: 1 }
+                  : { backgroundColor: '#f8fafc', borderColor: '#e5e7eb', color: '#94a3b8', scale: 1 }
+              }
+              transition={{ type: 'spring', stiffness: 360, damping: 26 }}
+            >
+              <span className="text-[10px] font-black leading-none">{short}</span>
+              <span className="text-[8px] opacity-60 mt-0.5">4 seg</span>
+            </motion.div>
+          ))}
         </div>
 
         <p className="text-xs text-gray-400 font-semibold">
