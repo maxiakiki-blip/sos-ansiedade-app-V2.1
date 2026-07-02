@@ -43,7 +43,6 @@ export default function App() {
   const [logs, setLogs] = useLocalStorageState<Record<string, string[]>>('sos_ansiedad_logs', {});
   const [moods, setMoods] = useLocalStorageState<Record<string, string>>('sos_ansiedad_moods', {});
   const [gamification, setGamification] = useLocalStorageState<GamificationState>('sos_gamification', DEFAULT_GAMIFICATION);
-  // Raw session counts — tracks every repetition, regardless of XP dedup
   const [activityCounts, setActivityCounts] = useLocalStorageState<Record<string, Record<string, number>>>('sos_activity_counts', {});
 
   const [currentUserEmail, setCurrentUserEmail] = useLocalStorageState<string | null>('sos_user_email', null);
@@ -66,7 +65,6 @@ export default function App() {
     });
   }, [rawBuyers]);
 
-  // ── Load buyers from Supabase on mount ──
   useEffect(() => {
     db.fetchBuyers().then(serverBuyers => {
       if (serverBuyers.length === 0) return;
@@ -80,15 +78,11 @@ export default function App() {
     }).catch(() => {});
   }, []);
 
-  // ── Load user data from Supabase on login ──
   useEffect(() => {
     if (!currentUserEmail) return;
-
-    // Show onboarding for new users
     if (!onboardingDone[currentUserEmail]) {
       setShowOnboarding(true);
     }
-
     Promise.all([
       db.fetchUserLogs(currentUserEmail),
       db.fetchUserMoods(currentUserEmail),
@@ -114,7 +108,6 @@ export default function App() {
     }).catch(() => {});
   }, [currentUserEmail]);
 
-  // ── Daily reminder notification ──
   useEffect(() => {
     if (!currentUserEmail) return;
     const timer = setTimeout(() => {
@@ -135,7 +128,6 @@ export default function App() {
       setOnboardingDone(prev => ({ ...prev, [currentUserEmail]: true }));
     }
     setShowOnboarding(false);
-    // Request notification permission after onboarding
     const granted = await requestNotificationPermission();
     if (granted) {
       setTimeout(() => {
@@ -178,7 +170,6 @@ export default function App() {
         const newIds = [...prev.unlockedBadgeIds, id];
         setNewBadge(id);
         setTimeout(() => setNewBadge(null), 3500);
-        // Check grand_master: all badges except itself
         const allOtherIds = ALL_BADGES.filter(b => b.id !== 'grand_master').map(b => b.id);
         const allUnlocked = allOtherIds.every(bid => newIds.includes(bid));
         if (allUnlocked && !newIds.includes('grand_master')) {
@@ -197,7 +188,7 @@ export default function App() {
     const today = getTodayDate();
     let newLogs: Record<string, string[]> = {};
 
-    // Always increment session count (tracks repetitions)
+    // Always increment raw session count before XP dedup check
     setActivityCounts(prev => {
       const dayCounts = prev[today] || {};
       return { ...prev, [today]: { ...dayCounts, [activityName]: (dayCounts[activityName] || 0) + 1 } };
@@ -205,12 +196,15 @@ export default function App() {
 
     setLogs(prev => {
       const todayLogs = prev[today] || [];
-      if (todayLogs.includes(activityName)) return prev; // XP only once per day
+      if (todayLogs.includes(activityName)) return prev;
       newLogs = { ...prev, [today]: [...todayLogs, activityName] };
       return newLogs;
     });
 
     setGamification(prev => {
+      const todayLogs = logs[today] || [];
+      if (todayLogs.includes(activityName)) return prev;
+
       const xpGain = XP_TABLE[activityName] || 20;
       const newXp = prev.xp + xpGain;
 
@@ -220,7 +214,7 @@ export default function App() {
       const yesterdayStr = yesterday.toISOString().split('T')[0];
 
       if (prev.lastActivityDate === today) {
-        // same day
+        // same day — streak unchanged
       } else if (prev.lastActivityDate === yesterdayStr) {
         newStreak = prev.streak + 1;
       } else {
@@ -246,7 +240,7 @@ export default function App() {
     });
 
     triggerConfetti();
-  }, [checkBadges, currentUserEmail]);
+  }, [checkBadges, currentUserEmail, logs]);
 
   const logMood = (moodId: string) => {
     const today = getTodayDate();
@@ -357,14 +351,11 @@ export default function App() {
 
       <AnimatePresence>
         {notifiedBadge && (
-          <motion.div
-            key={notifiedBadge.id}
-            initial={{ y: 80, opacity: 0, scale: 0.8 }}
-            animate={{ y: 0, opacity: 1, scale: 1 }}
+          <motion.div key={notifiedBadge.id}
+            initial={{ y: 80, opacity: 0, scale: 0.8 }} animate={{ y: 0, opacity: 1, scale: 1 }}
             exit={{ y: -20, opacity: 0, scale: 0.9 }}
             transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-            className="fixed bottom-28 left-1/2 -translate-x-1/2 z-50"
-          >
+            className="fixed bottom-28 left-1/2 -translate-x-1/2 z-50">
             <div className="bg-gradient-to-r from-[#1e293b] to-[#334155] text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 border border-white/10 min-w-[260px]">
               <span className="text-3xl">{notifiedBadge.emoji}</span>
               <div>
@@ -393,14 +384,10 @@ export default function App() {
                 Olá, <span className="text-[#b388c4]">{currentUserName}</span>
               </span>
             </div>
-
             <div className="flex items-center gap-2">
               {gamification.streak > 0 && (
-                <motion.div
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  className="flex items-center gap-1 bg-orange-50 border border-orange-200/60 px-2.5 py-1 rounded-full"
-                >
+                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}
+                  className="flex items-center gap-1 bg-orange-50 border border-orange-200/60 px-2.5 py-1 rounded-full">
                   <Flame className="w-3.5 h-3.5 text-orange-500" />
                   <span className="text-[11px] font-black text-orange-600">{gamification.streak}</span>
                 </motion.div>
@@ -410,9 +397,7 @@ export default function App() {
                 <span className="text-[11px] font-black text-[#b388c4]">{gamification.xp} XP</span>
               </div>
               {isSuperadmin && (
-                <span className="text-[9px] bg-amber-50 text-amber-700 font-extrabold border border-amber-200/50 px-2 py-0.5 rounded-full uppercase tracking-wider select-none">
-                  Admin
-                </span>
+                <span className="text-[9px] bg-amber-50 text-amber-700 font-extrabold border border-amber-200/50 px-2 py-0.5 rounded-full uppercase tracking-wider select-none">Admin</span>
               )}
               <button onClick={() => setIsSecurityModalOpen(true)} title="Segurança"
                 className="p-1 text-gray-400 hover:text-[#b388c4] rounded-lg transition-colors">
@@ -424,33 +409,23 @@ export default function App() {
               </button>
             </div>
           </div>
-
           <div className="flex items-center gap-2">
-            <span className="text-[9px] font-black text-gray-400 uppercase tracking-wider whitespace-nowrap"
-              style={{ color: levelInfo.color }}>
+            <span className="text-[9px] font-black text-gray-400 uppercase tracking-wider whitespace-nowrap" style={{ color: levelInfo.color }}>
               {levelInfo.name}
             </span>
             <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-              <div className="h-full rounded-full xp-bar-fill transition-all duration-700"
-                style={{ width: `${Math.max(2, xpProgress)}%` }} />
+              <div className="h-full rounded-full xp-bar-fill transition-all duration-700" style={{ width: `${Math.max(2, xpProgress)}%` }} />
             </div>
-            {nextLevel && (
-              <span className="text-[9px] font-bold text-gray-400 whitespace-nowrap">{nextLevel.name} →</span>
-            )}
+            {nextLevel && <span className="text-[9px] font-bold text-gray-400 whitespace-nowrap">{nextLevel.name} →</span>}
           </div>
         </div>
       </header>
 
       <main className="max-w-md mx-auto p-4 overflow-hidden">
         <AnimatePresence mode="wait" custom={tabDirection}>
-          <motion.div
-            key={activeTab}
-            custom={tabDirection}
-            initial={{ opacity: 0, x: tabDirection * 30 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: tabDirection * -30 }}
-            transition={{ duration: 0.22, ease: 'easeInOut' }}
-          >
+          <motion.div key={activeTab} custom={tabDirection}
+            initial={{ opacity: 0, x: tabDirection * 30 }} animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: tabDirection * -30 }} transition={{ duration: 0.22, ease: 'easeInOut' }}>
             {activeTab === 'rescate' && <TabRescate logActivity={logActivity} />}
             {activeTab === 'prevencion' && (
               <TabPrevencion logActivity={logActivity} logMood={logMood} currentMood={moods[getTodayDate()]} />
@@ -496,4 +471,4 @@ export default function App() {
       />
     </div>
   );
-}
+    }
